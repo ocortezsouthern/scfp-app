@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Clients — SCFP Inspection Tracker{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Clients</h1>
+  <button class="btn primary" onclick="document.getElementById('new-client').classList.toggle('open')">+ New Client</button>
+</div>
+
+<div id="new-client" class="collapsible panel">
+  <h2>New Client</h2>
+  <form method="post" action="/clients" class="form-grid">
+    <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+    <label>Name *<input type="text" name="name" required></label>
+    <label>Contact Name<input type="text" name="contact_name"></label>
+    <label>Phone<input type="text" name="phone"></label>
+    <label>Email<input type="email" name="email"></label>
+    <label class="span2">Billing Address<input type="text" name="billing_address"></label>
+    <label class="span2">Notes<textarea name="notes"></textarea></label>
+    <div class="span2"><button type="submit" class="btn primary">Create Client</button></div>
+  </form>
+</div>
+
+<form method="get" action="/clients" class="inline-search">
+  <input type="text" name="q" placeholder="Search clients…" value="{{ search }}">
+  <button class="btn" type="submit">Search</button>
+</form>
+
+<table class="data-table">
+  <thead><tr><th>Name</th><th>Contact</th><th>Phone</th><th>Email</th><th></th></tr></thead>
+  <tbody>
+  {% for c in clients %}
+    <tr>
+      <td><a href="/clients/{{ c['id'] }}">{{ c['name'] }}</a></td>
+      <td>{{ c['contact_name'] or '—' }}</td>
+      <td>{{ c['phone'] or '—' }}</td>
+      <td>{{ c['email'] or '—' }}</td>
+      <td><a href="/clients/{{ c['id'] }}">View</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="muted">No clients yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

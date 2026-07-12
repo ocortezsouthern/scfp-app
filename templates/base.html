@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}SCFP Inspection Tracker{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+{% if current_user %}
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="/">Southern Cross <span>Fire Protection</span></a>
+    <nav>
+      <a href="/">Dashboard</a>
+      <a href="/clients">Clients</a>
+      <a href="/inspections">Inspections</a>
+      <a href="/users">Users</a>
+    </nav>
+    <form class="search-form" action="/search" method="get">
+      <input type="text" name="q" placeholder="Search clients / sites…" value="{{ q|default('') }}">
+    </form>
+    <div class="user-menu">
+      <span>{{ current_user['name'] }}</span>
+      <a href="/logout">Log out</a>
+    </div>
+  </div>
+</header>
+{% endif %}
+<main class="{% if not current_user %}auth-page{% endif %}">
+{% block content %}{% endblock %}
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

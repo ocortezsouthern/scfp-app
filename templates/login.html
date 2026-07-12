@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Log in — SCFP Inspection Tracker{% endblock %}
+{% block content %}
+<div class="auth-box">
+  <h1>Southern Cross Fire Protection</h1>
+  <p class="muted">Inspection & Client Tracker</p>
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+  <form method="post" action="/login">
+    <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+    <input type="hidden" name="next" value="{{ next }}">
+    <label>Email<input type="email" name="email" required autofocus></label>
+    <label>Password<input type="password" name="password" required></label>
+    <button type="submit" class="btn primary">Log in</button>
+  </form>
+</div>
+{% endblock %}

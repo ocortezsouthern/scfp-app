@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — SCFP Inspection Tracker{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Dashboard</h1>
+</div>
+
+<div class="stat-row">
+  <div class="stat-card danger"><div class="stat-num">{{ counts.overdue }}</div><div class="stat-label">Overdue</div></div>
+  <div class="stat-card warn"><div class="stat-num">{{ counts.due_soon }}</div><div class="stat-label">Due in 30 days</div></div>
+  <div class="stat-card"><div class="stat-num">{{ counts.total_clients }}</div><div class="stat-label">Clients</div></div>
+  <div class="stat-card"><div class="stat-num">{{ counts.total_sites }}</div><div class="stat-label">Sites</div></div>
+  <div class="stat-card"><div class="stat-num">{{ counts.total_inspections }}</div><div class="stat-label">Inspections Logged</div></div>
+</div>
+
+<div class="two-col">
+  <section class="panel">
+    <h2>Overdue Inspections</h2>
+    {% if overdue %}
+    <table class="data-table">
+      <thead><tr><th>Client</th><th>Site</th><th>Type</th><th>Asset</th><th>Due</th><th></th></tr></thead>
+      <tbody>
+      {% for s in overdue %}
+        <tr>
+          <td><a href="/clients/{{ s['client_id'] }}">{{ s['client_name'] }}</a></td>
+          <td><a href="/sites/{{ s['site_id'] }}">{{ s['site_name'] }}</a></td>
+          <td>{{ type_cfg.get(s['inspection_type'], {}).get('label', s['inspection_type']) }}</td>
+          <td>{{ s['asset_label'] or '—' }}</td>
+          <td class="overdue">{{ s['next_due_date'] }}</td>
+          <td><a class="btn small" href="/inspections/new?type={{ s['inspection_type'] }}&site_id={{ s['site_id'] }}{% if s['asset_id'] %}&asset_id={{ s['asset_id'] }}{% endif %}">Log inspection</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Nothing overdue. Nice work.</p>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <h2>Due in the Next 30 Days</h2>
+    {% if due_soon %}
+    <table class="data-table">
+      <thead><tr><th>Client</th><th>Site</th><th>Type</th><th>Asset</th><th>Due</th><th></th></tr></thead>
+      <tbody>
+      {% for s in due_soon %}
+        <tr>
+          <td><a href="/clients/{{ s['client_id'] }}">{{ s['client_name'] }}</a></td>
+          <td><a href="/sites/{{ s['site_id'] }}">{{ s['site_name'] }}</a></td>
+          <td>{{ type_cfg.get(s['inspection_type'], {}).get('label', s['inspection_type']) }}</td>
+          <td>{{ s['asset_label'] or '—' }}</td>
+          <td class="due-soon">{{ s['next_due_date'] }}</td>
+          <td><a class="btn small" href="/inspections/new?type={{ s['inspection_type'] }}&site_id={{ s['site_id'] }}{% if s['asset_id'] %}&asset_id={{ s['asset_id'] }}{% endif %}">Log inspection</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Nothing due soon.</p>
+    {% endif %}
+  </section>
+</div>
+
+<section class="panel">
+  <h2>Recently Logged Inspections</h2>
+  {% if recent %}
+  <table class="data-table">
+    <thead><tr><th>Date</th><th>Client</th><th>Site</th><th>Type</th><th>Inspector</th><th>Result</th><th></th></tr></thead>
+    <tbody>
+    {% for i in recent %}
+      <tr>
+        <td>{{ i['inspection_date'] }}</td>
+        <td>{{ i['client_name'] }}</td>
+        <td><a href="/sites/{{ i['site_id'] }}">{{ i['site_name'] }}</a></td>
+        <td>{{ type_cfg.get(i['inspection_type'], {}).get('label', i['inspection_type']) }}</td>
+        <td>{{ i['inspector_name'] or '—' }}</td>
+        <td><span class="badge {{ 'badge-fail' if i['overall_result']=='Fail' else ('badge-pass' if i['overall_result']=='Pass' else '') }}">{{ i['overall_result'] or '—' }}</span></td>
+        <td><a href="/inspections/{{ i['id'] }}">View</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No inspections logged yet. <a href="/clients">Add a client</a> to get started.</p>
+  {% endif %}
+</section>
+{% endblock %}

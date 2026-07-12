@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Log Inspection — SCFP Inspection Tracker{% endblock %}
+
+{% macro simple_field(f) %}
+  {% set val = '' %}
+  <label class="field-{{ f.type }}">
+    {{ f.label }}
+    {% if f.type == 'textarea' %}
+      <textarea name="{{ f.key }}">{{ val }}</textarea>
+    {% elif f.type == 'yn' %}
+      <select name="{{ f.key }}"><option value="">—</option><option>Yes</option><option>No</option></select>
+    {% elif f.type == 'ynna' %}
+      <select name="{{ f.key }}"><option value="">—</option><option>Yes</option><option>No</option><option>N/A</option></select>
+    {% elif f.type == 'select' %}
+      <select name="{{ f.key }}">
+        {% for opt in f.options %}<option value="{{ opt }}">{{ opt if opt else '—' }}</option>{% endfor %}
+      </select>
+    {% elif f.type == 'number' %}
+      <input type="number" step="any" name="{{ f.key }}">
+    {% elif f.type == 'date' %}
+      <input type="date" name="{{ f.key }}">
+    {% else %}
+      <input type="text" name="{{ f.key }}">
+    {% endif %}
+  </label>
+{% endmacro %}
+
+{% macro table_field(f) %}
+  <div class="table-field" data-field="{{ f.key }}" data-columns='{{ f.columns|tojson }}'
+       data-default-rows='{{ (f.default_rows or [])|tojson }}'>
+    <label class="table-label">{{ f.label }}</label>
+    <div class="table-scroll">
+      <table class="dyn-table">
+        <thead><tr>
+          {% for col in f.columns %}<th>{{ col.label }}</th>{% endfor %}
+          <th></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <button type="button" class="btn small add-row-btn">+ Add row</button>
+  </div>
+{% endmacro %}
+
+{% block content %}
+{% if not cfg %}
+<div class="page-head"><h1>Log Inspection</h1></div>
+<div class="panel">
+  <p>Choose a site and inspection type from the site page first.</p>
+  <a class="btn" href="/clients">Go to Clients</a>
+</div>
+{% else %}
+<div class="breadcrumb">
+  {% if site %}<a href="/sites/{{ site['id'] }}">{{ site['name'] }}</a> / {% endif %}
+  New {{ cfg.label }}
+</div>
+<div class="page-head"><h1>{{ cfg.label }}</h1></div>
+
+<form method="post" action="/inspections/new" id="inspection-form">
+  <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+  <input type="hidden" name="inspection_type" value="{{ inspection_type }}">
+  <input type="hidden" name="site_id" value="{{ site_id }}">
+
+  <div class="panel">
+    <div class="form-grid">
+      <label>Site
+        <select name="site_id_display" disabled>
+          <option>{{ site['name'] if site else 'Unknown' }}</option>
+        </select>
+      </label>
+      <label>Equipment / Asset
+        <select name="asset_id">
+          <option value="">— Site-level (no specific asset) —</option>
+          {% for a in assets %}
+          <option value="{{ a['id'] }}" {% if asset and asset['id']==a['id'] %}selected{% endif %}>{{ a['label'] }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Inspection Date *
+        <input type="date" name="inspection_date" value="{{ today }}" required>
+      </label>
+    </div>
+  </div>
+
+  {% for section in cfg.sections %}
+  <div class="panel">
+    <h2>{{ section.name }}</h2>
+    <div class="form-grid">
+      {% for f in section.fields %}
+        {% if f.type != 'table' %}{{ simple_field(f) }}{% endif %}
+      {% endfor %}
+    </div>
+    {% for f in section.fields %}
+      {% if f.type == 'table' %}{{ table_field(f) }}{% endif %}
+    {% endfor %}
+  </div>
+  {% endfor %}
+
+  <div class="panel">
+    <h2>{{ closing.name }}</h2>
+    <div class="form-grid">
+      {% for f in closing.fields %}{{ simple_field(f) }}{% endfor %}
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" class="btn primary large">Save Inspection</button>
+  </div>
+</form>
+{% endif %}
+{% endblock %}

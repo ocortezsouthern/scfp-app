@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{{ asset['label'] }} — SCFP Inspection Tracker{% endblock %}
+{% block content %}
+<div class="breadcrumb"><a href="/clients">Clients</a> / <a href="/clients/{{ site['client_id'] }}">{{ site['client_name'] }}</a> / <a href="/sites/{{ site['id'] }}">{{ site['name'] }}</a> / {{ asset['label'] }}</div>
+<div class="page-head">
+  <h1>{{ asset['label'] }}</h1>
+  <a class="btn primary" href="/inspections/new?site_id={{ site['id'] }}&asset_id={{ asset['id'] }}">+ Log Inspection</a>
+</div>
+
+<div class="panel">
+  <table class="kv-table">
+    <tr><th>Manufacturer</th><td>{{ asset['manufacturer'] or '—' }}</td><th>Model</th><td>{{ asset['model'] or '—' }}</td></tr>
+    <tr><th>Serial #</th><td>{{ asset['serial_number'] or '—' }}</td><th>Size</th><td>{{ asset['size'] or '—' }}</td></tr>
+    <tr><th>Location</th><td>{{ asset['location'] or '—' }}</td><th>Install Date</th><td>{{ asset['install_date'] or '—' }}</td></tr>
+  </table>
+</div>
+
+<section class="panel">
+  <h2>Schedule</h2>
+  <table class="data-table">
+    <thead><tr><th>Type</th><th>Frequency</th><th>Last Done</th><th>Next Due</th></tr></thead>
+    <tbody>
+    {% for s in schedules %}
+      <tr>
+        <td>{{ type_cfg.get(s['inspection_type'], {}).get('label', s['inspection_type']) }}</td>
+        <td>{{ s['frequency_months']|months_label }}</td>
+        <td>{{ s['last_completed_date'] or '—' }}</td>
+        <td class="{{ 'overdue' if s['next_due_date'] < today else '' }}">{{ s['next_due_date'] or '—' }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4" class="muted">No schedule yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="panel">
+  <h2>Inspection History</h2>
+  <table class="data-table">
+    <thead><tr><th>Date</th><th>Type</th><th>Inspector</th><th>Result</th><th></th></tr></thead>
+    <tbody>
+    {% for i in inspections %}
+      <tr>
+        <td>{{ i['inspection_date'] }}</td>
+        <td>{{ type_cfg.get(i['inspection_type'], {}).get('label', i['inspection_type']) }}</td>
+        <td>{{ i['inspector_name'] or '—' }}</td>
+        <td><span class="badge {{ 'badge-fail' if i['overall_result']=='Fail' else ('badge-pass' if i['overall_result']=='Pass' else '') }}">{{ i['overall_result'] or '—' }}</span></td>
+        <td><a href="/inspections/{{ i['id'] }}">View</a> · <a href="/inspections/{{ i['id'] }}/pdf" target="_blank">PDF</a></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="muted">No inspections logged for this asset yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

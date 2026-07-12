@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}First-time setup — SCFP Inspection Tracker{% endblock %}
+{% block content %}
+<div class="auth-box">
+  <h1>Welcome</h1>
+  <p class="muted">Create the first admin account to get started.</p>
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+  <form method="post" action="/setup">
+    <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+    <label>Your Name<input type="text" name="name" required autofocus></label>
+    <label>Email<input type="email" name="email" required></label>
+    <label>Password (6+ characters)<input type="password" name="password" required minlength="6"></label>
+    <button type="submit" class="btn primary">Create admin account</button>
+  </form>
+</div>
+{% endblock %}

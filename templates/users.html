@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Users — SCFP Inspection Tracker{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Team Members</h1></div>
+{% if error %}<div class="alert">{{ error }}</div>{% endif %}
+<table class="data-table">
+  <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Cert #</th><th>Phone</th></tr></thead>
+  <tbody>
+  {% for u in users %}
+    <tr>
+      <td>{{ u['name'] }}</td>
+      <td>{{ u['email'] }}</td>
+      <td>{{ u['role'] }}</td>
+      <td>{{ u['cert_number'] or '—' }}</td>
+      <td>{{ u['phone'] or '—' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% if current_user['role'] == 'admin' %}
+<section class="panel">
+  <h2>Add Team Member</h2>
+  <form method="post" action="/users" class="form-grid">
+    <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+    <label>Name *<input type="text" name="name" required></label>
+    <label>Email *<input type="email" name="email" required></label>
+    <label>Temporary Password *<input type="password" name="password" required minlength="6"></label>
+    <label>Role
+      <select name="role">
+        <option value="inspector">Inspector</option>
+        <option value="admin">Admin</option>
+      </select>
+    </label>
+    <label>Certified Tester #<input type="text" name="cert_number"></label>
+    <label>Phone<input type="text" name="phone"></label>
+    <div class="span2"><button type="submit" class="btn primary">Add User</button></div>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

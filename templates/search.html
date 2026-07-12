@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Search — SCFP Inspection Tracker{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Search results for "{{ q }}"</h1></div>
+<section class="panel">
+  <h2>Clients</h2>
+  <table class="data-table">
+    <tbody>
+    {% for c in clients %}
+      <tr><td><a href="/clients/{{ c['id'] }}">{{ c['name'] }}</a></td></tr>
+    {% else %}
+      <tr><td class="muted">No matching clients.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+<section class="panel">
+  <h2>Sites</h2>
+  <table class="data-table">
+    <tbody>
+    {% for s in sites %}
+      <tr><td><a href="/sites/{{ s['id'] }}">{{ s['name'] }}</a> — {{ s['client_name'] }}</td></tr>
+    {% else %}
+      <tr><td class="muted">No matching sites.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

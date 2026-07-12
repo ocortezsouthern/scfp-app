@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}{{ client['name'] }} — SCFP Inspection Tracker{% endblock %}
+{% block content %}
+<div class="breadcrumb"><a href="/clients">Clients</a> / {{ client['name'] }}</div>
+<div class="page-head">
+  <h1>{{ client['name'] }}</h1>
+  <button class="btn primary" onclick="document.getElementById('new-site').classList.toggle('open')">+ New Site</button>
+</div>
+
+<div class="panel">
+  <table class="kv-table">
+    <tr><th>Contact</th><td>{{ client['contact_name'] or '—' }}</td><th>Phone</th><td>{{ client['phone'] or '—' }}</td></tr>
+    <tr><th>Email</th><td>{{ client['email'] or '—' }}</td><th>Billing Address</th><td>{{ client['billing_address'] or '—' }}</td></tr>
+  </table>
+</div>
+
+<div id="new-site" class="collapsible panel">
+  <h2>New Site / Location</h2>
+  <form method="post" action="/clients/{{ client['id'] }}/sites/new" class="form-grid">
+    <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+    <label>Site Name *<input type="text" name="name" required placeholder="e.g. Store #4021"></label>
+    <label>Store #<input type="text" name="store_number"></label>
+    <label>Street<input type="text" name="street"></label>
+    <label>City<input type="text" name="city"></label>
+    <label>State<input type="text" name="state" maxlength="2"></label>
+    <label>Zip<input type="text" name="zip"></label>
+    <label>Jurisdiction<input type="text" name="jurisdiction"></label>
+    <label>Division<input type="text" name="division"></label>
+    <label>Contact Person<input type="text" name="contact_person"></label>
+    <label>Contact Phone<input type="text" name="contact_phone"></label>
+    <label class="span2">Notes<textarea name="notes"></textarea></label>
+    <div class="span2"><button type="submit" class="btn primary">Create Site</button></div>
+  </form>
+</div>
+
+<section class="panel">
+  <h2>Sites</h2>
+  <table class="data-table">
+    <thead><tr><th>Site</th><th>Store #</th><th>City</th><th></th></tr></thead>
+    <tbody>
+    {% for s in sites %}
+      <tr>
+        <td><a href="/sites/{{ s['id'] }}">{{ s['name'] }}</a></td>
+        <td>{{ s['store_number'] or '—' }}</td>
+        <td>{{ s['city'] or '—' }}</td>
+        <td><a href="/sites/{{ s['id'] }}">View</a></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4" class="muted">No sites yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

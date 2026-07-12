@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}{{ site['name'] }} — SCFP Inspection Tracker{% endblock %}
+{% block content %}
+<div class="breadcrumb"><a href="/clients">Clients</a> / <a href="/clients/{{ site['client_id'] }}">{{ site['client_name'] }}</a> / {{ site['name'] }}</div>
+<div class="page-head">
+  <h1>{{ site['name'] }}</h1>
+  <div class="btn-group">
+    <button class="btn primary" onclick="document.getElementById('log-inspection').classList.toggle('open')">+ Log Inspection</button>
+    <button class="btn" onclick="document.getElementById('new-asset').classList.toggle('open')">+ Add Equipment</button>
+  </div>
+</div>
+
+<div class="panel">
+  <table class="kv-table">
+    <tr><th>Address</th><td>{{ site['street'] }}, {{ site['city'] }}, {{ site['state'] }} {{ site['zip'] }}</td>
+        <th>Store #</th><td>{{ site['store_number'] or '—' }}</td></tr>
+    <tr><th>Jurisdiction</th><td>{{ site['jurisdiction'] or '—' }} / {{ site['division'] or '—' }}</td>
+        <th>Contact</th><td>{{ site['contact_person'] or '—' }} {{ site['contact_phone'] or '' }}</td></tr>
+  </table>
+</div>
+
+<div id="log-inspection" class="collapsible panel">
+  <h2>Log a New Inspection</h2>
+  <form method="get" action="/inspections/new">
+    <input type="hidden" name="site_id" value="{{ site['id'] }}">
+    <label>Inspection Type
+      <select name="type" required>
+        <option value="">Select type…</option>
+        {% for key, label in all_types %}
+        <option value="{{ key }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Equipment (optional — for backflow/pump/hydrant inspections)
+      <select name="asset_id">
+        <option value="">— Site-level (no specific asset) —</option>
+        {% for a in assets %}
+        <option value="{{ a['id'] }}">{{ a['label'] }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="btn primary">Continue</button>
+  </form>
+</div>
+
+<div id="new-asset" class="collapsible panel">
+  <h2>Add Equipment / Asset</h2>
+  <form method="post" action="/sites/{{ site['id'] }}/assets/new" class="form-grid">
+    <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+    <label>Type
+      <select name="asset_type">
+        {% for k, v in asset_type_labels.items() %}
+        <option value="{{ k }}">{{ v }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Label *<input type="text" name="label" required placeholder="e.g. Backflow - Domestic DCVA"></label>
+    <label>Location on site<input type="text" name="location"></label>
+    <label>Manufacturer<input type="text" name="manufacturer"></label>
+    <label>Model<input type="text" name="model"></label>
+    <label>Serial #<input type="text" name="serial_number"></label>
+    <label>Size<input type="text" name="size"></label>
+    <label>Install Date<input type="date" name="install_date"></label>
+    <label class="span2">Notes<textarea name="notes"></textarea></label>
+    <div class="span2"><button type="submit" class="btn primary">Add Equipment</button></div>
+  </form>
+</div>
+
+<div class="two-col">
+  <section class="panel">
+    <h2>Equipment</h2>
+    <table class="data-table">
+      <thead><tr><th>Label</th><th>Type</th><th>Serial #</th><th></th></tr></thead>
+      <tbody>
+      {% for a in assets %}
+        <tr>
+          <td><a href="/assets/{{ a['id'] }}">{{ a['label'] }}</a></td>
+          <td>{{ asset_type_labels.get(a['asset_type'], a['asset_type']) }}</td>
+          <td>{{ a['serial_number'] or '—' }}</td>
+          <td><a href="/assets/{{ a['id'] }}">View</a></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" class="muted">No equipment logged yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <h2>Inspection Schedule</h2>
+    <table class="data-table">
+      <thead><tr><th>Type</th><th>Asset</th><th>Frequency</th><th>Last Done</th><th>Next Due</th></tr></thead>
+      <tbody>
+      {% for s in schedules %}
+        <tr>
+          <td>{{ type_cfg.get(s['inspection_type'], {}).get('label', s['inspection_type']) }}</td>
+          <td>{{ s['asset_label'] or '—' }}</td>
+          <td>{{ s['frequency_months']|months_label }}</td>
+          <td>{{ s['last_completed_date'] or '—' }}</td>
+          <td class="{{ 'overdue' if s['next_due_date'] < today else '' }}">{{ s['next_due_date'] or '—' }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="muted">No schedules yet — log an inspection or set a due date below.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <details class="manual-due">
+      <summary>Set a due date manually</summary>
+      <form method="post" action="/schedules/set" class="form-grid">
+        <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+        <input type="hidden" name="site_id" value="{{ site['id'] }}">
+        <input type="hidden" name="back" value="/sites/{{ site['id'] }}">
+        <label>Type
+          <select name="inspection_type" required>
+            {% for key, label in all_types %}
+            <option value="{{ key }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Asset (optional)
+          <select name="asset_id">
+            <option value="">— Site-level —</option>
+            {% for a in assets %}
+            <option value="{{ a['id'] }}">{{ a['label'] }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Next Due Date<input type="date" name="next_due_date" required></label>
+        <div><button type="submit" class="btn">Set Due Date</button></div>
+      </form>
+    </details>
+  </section>
+</div>
+
+<section class="panel">
+  <h2>Inspection History</h2>
+  <table class="data-table">
+    <thead><tr><th>Date</th><th>Type</th><th>Asset</th><th>Inspector</th><th>Result</th><th></th></tr></thead>
+    <tbody>
+    {% for i in inspections %}
+      <tr>
+        <td>{{ i['inspection_date'] }}</td>
+        <td>{{ type_cfg.get(i['inspection_type'], {}).get('label', i['inspection_type']) }}</td>
+        <td>{{ i['asset_label'] or '—' }}</td>
+        <td>{{ i['inspector_name'] or '—' }}</td>
+        <td><span class="badge {{ 'badge-fail' if i['overall_result']=='Fail' else ('badge-pass' if i['overall_result']=='Pass' else '') }}">{{ i['overall_result'] or '—' }}</span></td>
+        <td><a href="/inspections/{{ i['id'] }}">View</a> · <a href="/inspections/{{ i['id'] }}/pdf" target="_blank">PDF</a></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="muted">No inspections logged for this site yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

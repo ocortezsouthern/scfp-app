@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Inspection #{{ inspection['id'] }} — SCFP Inspection Tracker{% endblock %}
+
+{% macro show_value(f, data) %}
+  {% set v = data.get(f.key) %}
+  {% if v %}{{ v }}{% else %}<span class="muted">—</span>{% endif %}
+{% endmacro %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/clients/{{ inspection['client_id'] }}">{{ inspection['client_name'] }}</a> /
+  <a href="/sites/{{ inspection['site_id'] }}">{{ inspection['site_name'] }}</a> /
+  {{ cfg.label if cfg else inspection['inspection_type'] }}
+</div>
+<div class="page-head">
+  <h1>{{ cfg.label if cfg else inspection['inspection_type'] }}</h1>
+  <a class="btn primary" href="/inspections/{{ inspection['id'] }}/pdf" target="_blank">Download PDF</a>
+</div>
+
+<div class="panel">
+  <table class="kv-table">
+    <tr><th>Date</th><td>{{ inspection['inspection_date'] }}</td>
+        <th>Inspector</th><td>{{ inspection['inspector_name'] or '—' }}</td></tr>
+    <tr><th>Asset</th><td>{{ inspection['asset_label'] or '—' }}</td>
+        <th>Result</th><td><span class="badge {{ 'badge-fail' if inspection['overall_result']=='Fail' else ('badge-pass' if inspection['overall_result']=='Pass' else '') }}">{{ data.get('overall_result') or '—' }}</span></td></tr>
+  </table>
+</div>
+
+{% if cfg %}
+{% for section in cfg.sections %}
+<div class="panel">
+  <h2>{{ section.name }}</h2>
+  <table class="kv-table">
+  {% for f in section.fields %}
+    {% if f.type != 'table' %}
+    <tr><th>{{ f.label }}</th><td>{{ show_value(f, data) }}</td></tr>
+    {% endif %}
+  {% endfor %}
+  </table>
+  {% for f in section.fields %}
+    {% if f.type == 'table' and data.get(f.key) %}
+    <h3 class="table-title">{{ f.label }}</h3>
+    <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr>{% for col in f.columns %}<th>{{ col.label }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for row in data.get(f.key) %}
+        <tr>{% for col in f.columns %}<td>{{ row.get(col.key) or '—' }}</td>{% endfor %}</tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% endif %}
+  {% endfor %}
+</div>
+{% endfor %}
+{% endif %}
+
+<div class="panel">
+  <h2>{{ closing.name }}</h2>
+  <table class="kv-table">
+  {% for f in closing.fields %}
+    <tr><th>{{ f.label }}</th><td>{{ show_value(f, data) }}</td></tr>
+  {% endfor %}
+  </table>
+</div>
+{% endblock %}

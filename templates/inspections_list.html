@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Inspections — SCFP Inspection Tracker{% endblock %}
+{% block content %}
+<div class="page-head"><h1>All Inspections</h1></div>
+<form method="get" action="/inspections" class="inline-search">
+  <select name="type" onchange="this.form.submit()">
+    <option value="">All types</option>
+    {% for key, label in all_types %}
+    <option value="{{ key }}" {% if key==selected_type %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+</form>
+<table class="data-table">
+  <thead><tr><th>Date</th><th>Client</th><th>Site</th><th>Type</th><th>Asset</th><th>Inspector</th><th>Result</th><th></th></tr></thead>
+  <tbody>
+  {% for i in inspections %}
+    <tr>
+      <td>{{ i['inspection_date'] }}</td>
+      <td>{{ i['client_name'] }}</td>
+      <td><a href="/sites/{{ i['site_id'] }}">{{ i['site_name'] }}</a></td>
+      <td>{{ type_cfg.get(i['inspection_type'], {}).get('label', i['inspection_type']) }}</td>
+      <td>{{ i['asset_label'] or '—' }}</td>
+      <td>{{ i['inspector_name'] or '—' }}</td>
+      <td><span class="badge {{ 'badge-fail' if i['overall_result']=='Fail' else ('badge-pass' if i['overall_result']=='Pass' else '') }}">{{ i['overall_result'] or '—' }}</span></td>
+      <td><a href="/inspections/{{ i['id'] }}">View</a> · <a href="/inspections/{{ i['id'] }}/pdf" target="_blank">PDF</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="8" class="muted">No inspections logged yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
