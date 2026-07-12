@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS assets (
     size TEXT,
     install_date TEXT,
     notes TEXT,
+    status TEXT NOT NULL DEFAULT 'active',   -- 'active' or 'inactive' (out of service)
     created_at TEXT NOT NULL
 );
 
@@ -126,6 +127,8 @@ def _migrate(conn):
     """Small additive schema migrations, safe to re-run on an existing DB with data."""
     if not _column_exists(conn, "inspections", "updated_by"):
         conn.execute("ALTER TABLE inspections ADD COLUMN updated_by INTEGER REFERENCES users(id)")
+    if not _column_exists(conn, "assets", "status"):
+        conn.execute("ALTER TABLE assets ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
     conn.commit()
 
 
@@ -367,6 +370,16 @@ def create_asset(site_id, asset_type, label, **fields):
     return aid
 
 
+def update_asset(asset_id, **fields):
+    if not fields:
+        return
+    conn = get_conn()
+    cols = ", ".join(f"{k} = ?" for k in fields)
+    conn.execute(f"UPDATE assets SET {cols} WHERE id = ?", (*fields.values(), asset_id))
+    conn.commit()
+    conn.close()
+
+
 def list_assets(site_id=None, asset_type=None):
     conn = get_conn()
     query = "SELECT * FROM assets"
@@ -493,12 +506,12 @@ def set_manual_due_date(site_id, asset_id, inspection_type, frequency_months, ne
     conn.close()
 
 
-def list_schedules(site_id=None, upcoming_days=None, overdue_only=False):
+def list_schedules(site_id=None, upcoming_days=None, overdue_only=False, active_only=False):
     conn = get_conn()
     query = """
         SELECT schedules.*, sites.name AS site_name, sites.city AS site_city,
                clients.name AS client_name, clients.id AS client_id,
-               assets.label AS asset_label
+               assets.label AS asset_label, assets.status AS asset_status
         FROM schedules
         JOIN sites ON sites.id = schedules.site_id
         JOIN clients ON clients.id = sites.client_id
@@ -515,6 +528,8 @@ def list_schedules(site_id=None, upcoming_days=None, overdue_only=False):
         conditions.append("schedules.next_due_date <= ?")
         cutoff = (datetime.date.today() + datetime.timedelta(days=upcoming_days)).isoformat()
         params.append(cutoff)
+    if active_only:
+        conditions.append("(schedules.asset_id IS NULL OR assets.status = 'active')")
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
     query += " ORDER BY schedules.next_due_date ASC"
@@ -527,9 +542,20 @@ def dashboard_counts():
     conn = get_conn()
     today = today_iso()
     soon = (datetime.date.today() + datetime.timedelta(days=30)).isoformat()
-    overdue = conn.execute("SELECT COUNT(*) c FROM schedules WHERE next_due_date < ?", (today,)).fetchone()["c"]
+    overdue = conn.execute(
+        """
+        SELECT COUNT(*) c FROM schedules LEFT JOIN assets ON assets.id = schedules.asset_id
+        WHERE schedules.next_due_date < ? AND (schedules.asset_id IS NULL OR assets.status = 'active')
+        """,
+        (today,),
+    ).fetchone()["c"]
     due_soon = conn.execute(
-        "SELECT COUNT(*) c FROM schedules WHERE next_due_date >= ? AND next_due_date <= ?", (today, soon)
+        """
+        SELECT COUNT(*) c FROM schedules LEFT JOIN assets ON assets.id = schedules.asset_id
+        WHERE schedules.next_due_date >= ? AND schedules.next_due_date <= ?
+          AND (schedules.asset_id IS NULL OR assets.status = 'active')
+        """,
+        (today, soon),
     ).fetchone()["c"]
     total_clients = conn.execute("SELECT COUNT(*) c FROM clients").fetchone()["c"]
     total_sites = conn.execute("SELECT COUNT(*) c FROM sites").fetchone()["c"]

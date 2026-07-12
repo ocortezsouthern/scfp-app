@@ -133,8 +133,8 @@ class LogoutHandler(BaseHandler):
 class DashboardHandler(BaseHandler):
     @require_login
     def get(self):
-        overdue = db.list_schedules(overdue_only=True)
-        due_soon = [s for s in db.list_schedules(upcoming_days=30) if s["next_due_date"] >= db.today_iso()]
+        overdue = db.list_schedules(overdue_only=True, active_only=True)
+        due_soon = [s for s in db.list_schedules(upcoming_days=30, active_only=True) if s["next_due_date"] >= db.today_iso()]
         counts = db.dashboard_counts()
         recent = db.recent_inspections(limit=10)
         self.render_tpl("dashboard.html", overdue=overdue, due_soon=due_soon,
@@ -222,6 +222,28 @@ class ClientDeleteHandler(BaseHandler):
         self.redirect("/clients")
 
 
+class ClientEditHandler(BaseHandler):
+    @require_login
+    def post(self, client_id):
+        client_id = int(client_id)
+        if not db.get_client(client_id):
+            raise tornado.web.HTTPError(404)
+        name = self.get_body_argument("name", "").strip()
+        if not name:
+            self.redirect(f"/clients/{client_id}")
+            return
+        db.update_client(
+            client_id,
+            name=name,
+            contact_name=self.get_body_argument("contact_name", ""),
+            phone=self.get_body_argument("phone", ""),
+            email=self.get_body_argument("email", ""),
+            billing_address=self.get_body_argument("billing_address", ""),
+            notes=self.get_body_argument("notes", ""),
+        )
+        self.redirect(f"/clients/{client_id}")
+
+
 class SiteNewHandler(BaseHandler):
     @require_login
     def post(self, client_id):
@@ -280,6 +302,33 @@ class SiteDeleteHandler(BaseHandler):
         self.redirect(f"/clients/{client_id}")
 
 
+class SiteEditHandler(BaseHandler):
+    @require_login
+    def post(self, site_id):
+        site_id = int(site_id)
+        if not db.get_site(site_id):
+            raise tornado.web.HTTPError(404)
+        name = self.get_body_argument("name", "").strip()
+        if not name:
+            self.redirect(f"/sites/{site_id}")
+            return
+        db.update_site(
+            site_id,
+            name=name,
+            street=self.get_body_argument("street", ""),
+            city=self.get_body_argument("city", ""),
+            state=self.get_body_argument("state", ""),
+            zip=self.get_body_argument("zip", ""),
+            jurisdiction=self.get_body_argument("jurisdiction", ""),
+            division=self.get_body_argument("division", ""),
+            contact_person=self.get_body_argument("contact_person", ""),
+            contact_phone=self.get_body_argument("contact_phone", ""),
+            store_number=self.get_body_argument("store_number", ""),
+            notes=self.get_body_argument("notes", ""),
+        )
+        self.redirect(f"/sites/{site_id}")
+
+
 class AssetNewHandler(BaseHandler):
     @require_login
     def post(self, site_id):
@@ -315,7 +364,8 @@ class AssetDetailHandler(BaseHandler):
         inspections = db.list_inspections(asset_id=asset_id, limit=25)
         impact = db.asset_delete_impact(asset_id)
         self.render_tpl("asset_detail.html", asset=asset, site=site, schedules=schedules,
-                         inspections=inspections, type_cfg=INSPECTION_TYPES, impact=impact)
+                         inspections=inspections, type_cfg=INSPECTION_TYPES, impact=impact,
+                         asset_type_labels=ASSET_TYPE_LABELS)
 
 
 class AssetDeleteHandler(BaseHandler):
@@ -332,6 +382,36 @@ class AssetDeleteHandler(BaseHandler):
         site_id = asset["site_id"]
         db.delete_asset(asset_id)
         self.redirect(f"/sites/{site_id}")
+
+
+class AssetEditHandler(BaseHandler):
+    @require_login
+    def post(self, asset_id):
+        asset_id = int(asset_id)
+        asset = db.get_asset(asset_id)
+        if not asset:
+            raise tornado.web.HTTPError(404)
+        label = self.get_body_argument("label", "").strip()
+        if not label:
+            self.redirect(f"/assets/{asset_id}")
+            return
+        status = self.get_body_argument("status", "active")
+        if status not in ("active", "inactive"):
+            status = "active"
+        db.update_asset(
+            asset_id,
+            label=label,
+            asset_type=self.get_body_argument("asset_type", asset["asset_type"]),
+            status=status,
+            location=self.get_body_argument("location", ""),
+            manufacturer=self.get_body_argument("manufacturer", ""),
+            model=self.get_body_argument("model", ""),
+            serial_number=self.get_body_argument("serial_number", ""),
+            size=self.get_body_argument("size", ""),
+            install_date=self.get_body_argument("install_date", ""),
+            notes=self.get_body_argument("notes", ""),
+        )
+        self.redirect(f"/assets/{asset_id}")
 
 
 class ScheduleSetHandler(BaseHandler):
@@ -592,12 +672,15 @@ def make_app():
         (r"/users", UsersHandler),
         (r"/clients", ClientsHandler),
         (r"/clients/(\d+)", ClientDetailHandler),
+        (r"/clients/(\d+)/edit", ClientEditHandler),
         (r"/clients/(\d+)/delete", ClientDeleteHandler),
         (r"/clients/(\d+)/sites/new", SiteNewHandler),
         (r"/sites/(\d+)", SiteDetailHandler),
+        (r"/sites/(\d+)/edit", SiteEditHandler),
         (r"/sites/(\d+)/delete", SiteDeleteHandler),
         (r"/sites/(\d+)/assets/new", AssetNewHandler),
         (r"/assets/(\d+)", AssetDetailHandler),
+        (r"/assets/(\d+)/edit", AssetEditHandler),
         (r"/assets/(\d+)/delete", AssetDeleteHandler),
         (r"/schedules/set", ScheduleSetHandler),
         (r"/inspections", InspectionsListHandler),
