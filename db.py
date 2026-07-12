@@ -102,11 +102,33 @@ CREATE TABLE IF NOT EXISTS inspections (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS service_calls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site_id INTEGER REFERENCES sites(id) ON DELETE SET NULL,
+    customer_name TEXT,           -- free-text fallback if site isn't in the system yet
+    location_address TEXT,        -- free-text fallback address
+    contact_name TEXT,
+    contact_phone TEXT,
+    call_type TEXT NOT NULL DEFAULT 'Service Call',   -- Emergency Call / Service Call / Scheduled Inspection / Follow-Up
+    work_order_number TEXT,
+    description TEXT,
+    scheduled_date TEXT NOT NULL,
+    scheduled_time TEXT,
+    assigned_to INTEGER REFERENCES users(id),
+    status TEXT NOT NULL DEFAULT 'Scheduled',   -- Scheduled / In Progress / Completed / Cancelled
+    notes TEXT,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_sites_client ON sites(client_id);
 CREATE INDEX IF NOT EXISTS idx_assets_site ON assets(site_id);
 CREATE INDEX IF NOT EXISTS idx_schedules_due ON schedules(next_due_date);
 CREATE INDEX IF NOT EXISTS idx_inspections_site ON inspections(site_id);
 CREATE INDEX IF NOT EXISTS idx_inspections_asset ON inspections(asset_id);
+CREATE INDEX IF NOT EXISTS idx_service_calls_date ON service_calls(scheduled_date);
+CREATE INDEX IF NOT EXISTS idx_service_calls_status ON service_calls(status);
 """
 
 
@@ -669,3 +691,119 @@ def list_inspections(site_id=None, asset_id=None, inspection_type=None, limit=10
 
 def recent_inspections(limit=20):
     return list_inspections(limit=limit)
+
+
+# ---------- Service Calls (emergency / ad-hoc work orders) ----------
+
+SERVICE_CALL_JOIN = """
+    SELECT service_calls.*,
+           sites.name AS site_name, sites.city AS site_city,
+           clients.name AS client_name, clients.id AS client_id,
+           tech.name AS assigned_to_name,
+           creator.name AS created_by_name
+    FROM service_calls
+    LEFT JOIN sites ON sites.id = service_calls.site_id
+    LEFT JOIN clients ON clients.id = sites.client_id
+    LEFT JOIN users AS tech ON tech.id = service_calls.assigned_to
+    LEFT JOIN users AS creator ON creator.id = service_calls.created_by
+"""
+
+
+def create_service_call(scheduled_date, description, site_id=None, customer_name="",
+                         location_address="", contact_name="", contact_phone="",
+                         call_type="Service Call", work_order_number="", scheduled_time="",
+                         assigned_to=None, status="Scheduled", notes="", created_by=None):
+    conn = get_conn()
+    cur = conn.execute(
+        """
+        INSERT INTO service_calls
+        (site_id, customer_name, location_address, contact_name, contact_phone, call_type,
+         work_order_number, description, scheduled_date, scheduled_time, assigned_to, status,
+         notes, created_by, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (site_id, customer_name, location_address, contact_name, contact_phone, call_type,
+         work_order_number, description, scheduled_date, scheduled_time, assigned_to, status,
+         notes, created_by, now_iso(), now_iso()),
+    )
+    conn.commit()
+    scid = cur.lastrowid
+    conn.close()
+    return scid
+
+
+def update_service_call(call_id, **fields):
+    if not fields:
+        return
+    fields["updated_at"] = now_iso()
+    conn = get_conn()
+    cols = ", ".join(f"{k} = ?" for k in fields)
+    conn.execute(f"UPDATE service_calls SET {cols} WHERE id = ?", (*fields.values(), call_id))
+    conn.commit()
+    conn.close()
+
+
+def set_service_call_status(call_id, status):
+    update_service_call(call_id, status=status)
+
+
+def get_service_call(call_id):
+    conn = get_conn()
+    row = conn.execute(SERVICE_CALL_JOIN + " WHERE service_calls.id = ?", (call_id,)).fetchone()
+    conn.close()
+    return row
+
+
+def list_service_calls(status=None, upcoming_only=False, site_id=None, limit=200):
+    conn = get_conn()
+    query = SERVICE_CALL_JOIN
+    conditions, params = [], []
+    if status:
+        conditions.append("service_calls.status = ?")
+        params.append(status)
+    if upcoming_only:
+        conditions.append("service_calls.status NOT IN ('Completed', 'Cancelled')")
+    if site_id:
+        conditions.append("service_calls.site_id = ?")
+        params.append(site_id)
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY service_calls.scheduled_date ASC, service_calls.scheduled_time ASC LIMIT ?"
+    params.append(limit)
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+    return rows
+
+
+def upcoming_service_calls(days=14, limit=50):
+    """Open (not completed/cancelled) calls due within the window, plus anything
+    already overdue — sorted soonest first, for the dashboard panel."""
+    conn = get_conn()
+    cutoff = (datetime.date.today() + datetime.timedelta(days=days)).isoformat()
+    rows = conn.execute(
+        SERVICE_CALL_JOIN + """
+        WHERE service_calls.status NOT IN ('Completed', 'Cancelled')
+          AND service_calls.scheduled_date <= ?
+        ORDER BY service_calls.scheduled_date ASC, service_calls.scheduled_time ASC
+        LIMIT ?
+        """,
+        (cutoff, limit),
+    ).fetchall()
+    conn.close()
+    return rows
+
+
+def count_open_service_calls():
+    conn = get_conn()
+    n = conn.execute(
+        "SELECT COUNT(*) c FROM service_calls WHERE status NOT IN ('Completed', 'Cancelled')"
+    ).fetchone()["c"]
+    conn.close()
+    return n
+
+
+def delete_service_call(call_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM service_calls WHERE id = ?", (call_id,))
+    conn.commit()
+    conn.close()

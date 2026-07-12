@@ -50,6 +50,9 @@ ASSET_TYPE_LABELS = {
     "other": "Other Equipment",
 }
 
+CALL_TYPES = ["Emergency Call", "Service Call", "Scheduled Inspection", "Follow-Up"]
+CALL_STATUSES = ["Scheduled", "In Progress", "Completed", "Cancelled"]
+
 
 class BaseHandler(tornado.web.RequestHandler):
     def get_current_user(self):
@@ -140,9 +143,13 @@ class DashboardHandler(BaseHandler):
         overdue = db.list_schedules(overdue_only=True, active_only=True)
         due_soon = [s for s in db.list_schedules(upcoming_days=30, active_only=True) if s["next_due_date"] >= db.today_iso()]
         counts = db.dashboard_counts()
+        counts["open_calls"] = db.count_open_service_calls()
         recent = db.recent_inspections(limit=10)
+        upcoming_calls = db.upcoming_service_calls(days=14)
         self.render_tpl("dashboard.html", overdue=overdue, due_soon=due_soon,
-                         counts=counts, recent=recent, type_cfg=INSPECTION_TYPES)
+                         counts=counts, recent=recent, type_cfg=INSPECTION_TYPES,
+                         upcoming_calls=upcoming_calls, sites=db.list_sites(),
+                         techs=db.list_users(), call_types=CALL_TYPES)
 
 
 # -------------------------------------------------------------- users -----
@@ -433,6 +440,112 @@ class ScheduleSetHandler(BaseHandler):
         self.redirect(back)
 
 
+# ----------------------------------------------------------- service calls -
+
+class ServiceCallsHandler(BaseHandler):
+    @require_login
+    def get(self):
+        status = self.get_argument("status", "") or None
+        self.render_tpl("service_calls.html", calls=db.list_service_calls(status=status),
+                         selected_status=status or "", call_types=CALL_TYPES,
+                         call_statuses=CALL_STATUSES, sites=db.list_sites(), techs=db.list_users())
+
+    @require_login
+    def post(self):
+        site_id = self.get_body_argument("site_id", "") or None
+        site_id = int(site_id) if site_id else None
+        customer_name = self.get_body_argument("customer_name", "").strip()
+        scheduled_date = self.get_body_argument("scheduled_date", "").strip()
+        description = self.get_body_argument("description", "").strip()
+        if not scheduled_date or not description or not (site_id or customer_name):
+            self.redirect(self.get_body_argument("back", "/service-calls"))
+            return
+        assigned_to = self.get_body_argument("assigned_to", "") or None
+        assigned_to = int(assigned_to) if assigned_to else None
+        db.create_service_call(
+            scheduled_date=scheduled_date,
+            description=description,
+            site_id=site_id,
+            customer_name=customer_name,
+            location_address=self.get_body_argument("location_address", ""),
+            contact_name=self.get_body_argument("contact_name", ""),
+            contact_phone=self.get_body_argument("contact_phone", ""),
+            call_type=self.get_body_argument("call_type", "Service Call"),
+            work_order_number=self.get_body_argument("work_order_number", ""),
+            scheduled_time=self.get_body_argument("scheduled_time", ""),
+            assigned_to=assigned_to,
+            notes=self.get_body_argument("notes", ""),
+            created_by=self.current_user["id"],
+        )
+        self.redirect(self.get_body_argument("back", "/service-calls"))
+
+
+class ServiceCallDetailHandler(BaseHandler):
+    @require_login
+    def get(self, call_id):
+        call = db.get_service_call(int(call_id))
+        if not call:
+            raise tornado.web.HTTPError(404)
+        self.render_tpl("service_call_detail.html", call=call, call_types=CALL_TYPES,
+                         call_statuses=CALL_STATUSES, sites=db.list_sites(), techs=db.list_users())
+
+
+class ServiceCallEditHandler(BaseHandler):
+    @require_login
+    def post(self, call_id):
+        call_id = int(call_id)
+        if not db.get_service_call(call_id):
+            raise tornado.web.HTTPError(404)
+        site_id = self.get_body_argument("site_id", "") or None
+        site_id = int(site_id) if site_id else None
+        assigned_to = self.get_body_argument("assigned_to", "") or None
+        assigned_to = int(assigned_to) if assigned_to else None
+        db.update_service_call(
+            call_id,
+            site_id=site_id,
+            customer_name=self.get_body_argument("customer_name", "").strip(),
+            location_address=self.get_body_argument("location_address", ""),
+            contact_name=self.get_body_argument("contact_name", ""),
+            contact_phone=self.get_body_argument("contact_phone", ""),
+            call_type=self.get_body_argument("call_type", "Service Call"),
+            work_order_number=self.get_body_argument("work_order_number", ""),
+            description=self.get_body_argument("description", "").strip(),
+            scheduled_date=self.get_body_argument("scheduled_date", "").strip(),
+            scheduled_time=self.get_body_argument("scheduled_time", ""),
+            assigned_to=assigned_to,
+            status=self.get_body_argument("status", "Scheduled"),
+            notes=self.get_body_argument("notes", ""),
+        )
+        self.redirect(f"/service-calls/{call_id}")
+
+
+class ServiceCallStatusHandler(BaseHandler):
+    @require_login
+    def post(self, call_id):
+        call_id = int(call_id)
+        if not db.get_service_call(call_id):
+            raise tornado.web.HTTPError(404)
+        status = self.get_body_argument("status", "Scheduled")
+        if status not in CALL_STATUSES:
+            status = "Scheduled"
+        db.set_service_call_status(call_id, status)
+        self.redirect(self.get_body_argument("back", "/service-calls"))
+
+
+class ServiceCallDeleteHandler(BaseHandler):
+    @require_login
+    def post(self, call_id):
+        if self.current_user["role"] != "admin":
+            self.set_status(403)
+            self.write("Only admins can delete service calls.")
+            return
+        call_id = int(call_id)
+        if not db.get_service_call(call_id):
+            raise tornado.web.HTTPError(404)
+        db.delete_service_call(call_id)
+        self.redirect("/service-calls")
+
+
 # --------------------------------------------------------- inspections ----
 
 TABLE_ROW_RE = re.compile(r"^tbl_(?P<field>[A-Za-z0-9_]+)_(?P<idx>\d+)_(?P<col>[A-Za-z0-9_]+)$")
@@ -687,6 +800,11 @@ def make_app():
         (r"/assets/(\d+)/edit", AssetEditHandler),
         (r"/assets/(\d+)/delete", AssetDeleteHandler),
         (r"/schedules/set", ScheduleSetHandler),
+        (r"/service-calls", ServiceCallsHandler),
+        (r"/service-calls/(\d+)", ServiceCallDetailHandler),
+        (r"/service-calls/(\d+)/edit", ServiceCallEditHandler),
+        (r"/service-calls/(\d+)/status", ServiceCallStatusHandler),
+        (r"/service-calls/(\d+)/delete", ServiceCallDeleteHandler),
         (r"/inspections", InspectionsListHandler),
         (r"/inspections/new", InspectionNewHandler),
         (r"/inspections/(\d+)", InspectionDetailHandler),
