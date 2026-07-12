@@ -17,7 +17,8 @@
   <section class="panel">
     <h2>Overdue Inspections</h2>
     {% if overdue %}
-    <table class="data-table">
+    <div class="table-scroll">
+<table class="data-table">
       <thead><tr><th>Client</th><th>Site</th><th>Type</th><th>Asset</th><th>Due</th><th></th></tr></thead>
       <tbody>
       {% for s in overdue %}
@@ -32,6 +33,7 @@
       {% endfor %}
       </tbody>
     </table>
+</div>
     {% else %}
     <p class="muted">Nothing overdue. Nice work.</p>
     {% endif %}
@@ -40,7 +42,8 @@
   <section class="panel">
     <h2>Due in the Next 30 Days</h2>
     {% if due_soon %}
-    <table class="data-table">
+    <div class="table-scroll">
+<table class="data-table">
       <thead><tr><th>Client</th><th>Site</th><th>Type</th><th>Asset</th><th>Due</th><th></th></tr></thead>
       <tbody>
       {% for s in due_soon %}
@@ -55,6 +58,7 @@
       {% endfor %}
       </tbody>
     </table>
+</div>
     {% else %}
     <p class="muted">Nothing due soon.</p>
     {% endif %}
@@ -64,7 +68,8 @@
 <section class="panel">
   <h2>Recently Logged Inspections</h2>
   {% if recent %}
-  <table class="data-table">
+  <div class="table-scroll">
+<table class="data-table">
     <thead><tr><th>Date</th><th>Client</th><th>Site</th><th>Type</th><th>Inspector</th><th>Result</th><th></th></tr></thead>
     <tbody>
     {% for i in recent %}
@@ -80,6 +85,7 @@
     {% endfor %}
     </tbody>
   </table>
+</div>
   {% else %}
   <p class="muted">No inspections logged yet. <a href="/clients">Add a client</a> to get started.</p>
   {% endif %}

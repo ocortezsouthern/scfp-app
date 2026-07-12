@@ -10,22 +10,28 @@
 {% if current_user %}
 <header class="topbar">
   <div class="topbar-inner">
-    <a class="brand" href="/">Southern Cross <span>Fire Protection</span></a>
-    <nav>
-      <a href="/">Dashboard</a>
-      <a href="/clients">Clients</a>
-      <a href="/inspections">Inspections</a>
-      <a href="/users">Users</a>
-    </nav>
-    <form class="search-form" action="/search" method="get">
-      <input type="text" name="q" placeholder="Search clients / sites…" value="{{ q|default('') }}">
-    </form>
-    <div class="user-menu">
-      {% if current_user['role'] == 'admin' %}
-      <a href="/admin/backup" title="Download a full backup of the database">Download Backup</a>
-      {% endif %}
-      <span>{{ current_user['name'] }}</span>
-      <a href="/logout">Log out</a>
+    <div class="topbar-row1">
+      <a class="brand" href="/">Southern Cross <span>Fire Protection</span></a>
+      <button type="button" class="nav-toggle" aria-label="Menu"
+              onclick="document.querySelector('.topbar').classList.toggle('nav-open')">&#9776;</button>
+    </div>
+    <div class="topbar-collapsible">
+      <nav>
+        <a href="/">Dashboard</a>
+        <a href="/clients">Clients</a>
+        <a href="/inspections">Inspections</a>
+        <a href="/users">Users</a>
+      </nav>
+      <form class="search-form" action="/search" method="get">
+        <input type="text" name="q" placeholder="Search clients / sites…" value="{{ q|default('') }}">
+      </form>
+      <div class="user-menu">
+        {% if current_user['role'] == 'admin' %}
+        <a href="/admin/backup" title="Download a full backup of the database">Download Backup</a>
+        {% endif %}
+        <span>{{ current_user['name'] }}</span>
+        <a href="/logout">Log out</a>
+      </div>
     </div>
   </div>
 </header>

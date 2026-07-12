@@ -59,7 +59,8 @@
 
 <section class="panel">
   <h2>Sites</h2>
-  <table class="data-table">
+  <div class="table-scroll">
+<table class="data-table">
     <thead><tr><th>Site</th><th>Store #</th><th>City</th><th></th></tr></thead>
     <tbody>
     {% for s in sites %}
@@ -74,5 +75,6 @@
     {% endfor %}
     </tbody>
   </table>
+</div>
 </section>
 {% endblock %}

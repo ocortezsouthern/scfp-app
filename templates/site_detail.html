@@ -96,7 +96,8 @@
 <div class="two-col">
   <section class="panel">
     <h2>Equipment</h2>
-    <table class="data-table">
+    <div class="table-scroll">
+<table class="data-table">
       <thead><tr><th>Label</th><th>Type</th><th>Serial #</th><th>Status</th><th></th></tr></thead>
       <tbody>
       {% for a in assets %}
@@ -112,11 +113,13 @@
       {% endfor %}
       </tbody>
     </table>
+</div>
   </section>
 
   <section class="panel">
     <h2>Inspection Schedule</h2>
-    <table class="data-table">
+    <div class="table-scroll">
+<table class="data-table">
       <thead><tr><th>Type</th><th>Asset</th><th>Frequency</th><th>Last Done</th><th>Next Due</th></tr></thead>
       <tbody>
       {% for s in schedules %}
@@ -132,6 +135,7 @@
       {% endfor %}
       </tbody>
     </table>
+</div>
     <details class="manual-due">
       <summary>Set a due date manually</summary>
       <form method="post" action="/schedules/set" class="form-grid">
@@ -162,7 +166,8 @@
 
 <section class="panel">
   <h2>Inspection History</h2>
-  <table class="data-table">
+  <div class="table-scroll">
+<table class="data-table">
     <thead><tr><th>Date</th><th>Type</th><th>Asset</th><th>Inspector</th><th>Result</th><th></th></tr></thead>
     <tbody>
     {% for i in inspections %}
@@ -179,5 +184,6 @@
     {% endfor %}
     </tbody>
   </table>
+</div>
 </section>
 {% endblock %}
