@@ -150,6 +150,7 @@ class DashboardHandler(BaseHandler):
                          counts=counts, recent=recent, type_cfg=INSPECTION_TYPES,
                          upcoming_calls=upcoming_calls, sites=db.list_sites(),
                          techs=db.list_users(), call_types=CALL_TYPES,
+                         clients=db.list_clients(),
                          suggested_wo=db.next_service_call_wo_number())
 
 
@@ -450,18 +451,34 @@ class ServiceCallsHandler(BaseHandler):
         self.render_tpl("service_calls.html", calls=db.list_service_calls(status=status),
                          selected_status=status or "", call_types=CALL_TYPES,
                          call_statuses=CALL_STATUSES, sites=db.list_sites(), techs=db.list_users(),
-                         suggested_wo=db.next_service_call_wo_number())
+                         clients=db.list_clients(), suggested_wo=db.next_service_call_wo_number())
 
     @require_login
     def post(self):
         site_id = self.get_body_argument("site_id", "") or None
         site_id = int(site_id) if site_id else None
+        existing_client_id = self.get_body_argument("existing_client_id", "") or None
+        existing_client_id = int(existing_client_id) if existing_client_id else None
+        new_site_name = self.get_body_argument("new_site_name", "").strip()
         customer_name = self.get_body_argument("customer_name", "").strip()
+        location_address = self.get_body_argument("location_address", "").strip()
         scheduled_date = self.get_body_argument("scheduled_date", "").strip()
         description = self.get_body_argument("description", "").strip()
-        if not scheduled_date or not description or not (site_id or customer_name):
+        if not scheduled_date or not description or not (site_id or customer_name or new_site_name):
             self.redirect(self.get_body_argument("back", "/service-calls"))
             return
+
+        # If no existing site was picked but there's enough info to set one up
+        # (either an existing client + a new site name, or a brand-new
+        # customer name + a new site name), create the client/site now so
+        # this call — and every future one — is tracked against a real record.
+        if not site_id and new_site_name:
+            client_id = existing_client_id
+            if not client_id and customer_name:
+                client_id = db.create_client(customer_name)
+            if client_id:
+                site_id = db.create_site(client_id, new_site_name, street=location_address)
+
         assigned_to = self.get_body_argument("assigned_to", "") or None
         assigned_to = int(assigned_to) if assigned_to else None
         db.create_service_call(
@@ -469,7 +486,7 @@ class ServiceCallsHandler(BaseHandler):
             description=description,
             site_id=site_id,
             customer_name=customer_name,
-            location_address=self.get_body_argument("location_address", ""),
+            location_address=location_address,
             contact_name=self.get_body_argument("contact_name", ""),
             contact_phone=self.get_body_argument("contact_phone", ""),
             call_type=self.get_body_argument("call_type", "Service Call"),
