@@ -103,6 +103,9 @@ textarea { min-height: 60px; resize: vertical; }
 .auth-box label { font-size: 13px; color: var(--muted); font-weight: 600; display: flex; flex-direction: column; gap: 4px; }
 
 .alert { background: #fbe4e1; color: var(--accent); padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; font-size: 13.5px; }
+.notice { background: #eaf1fb; color: #1c3560; padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; font-size: 13.5px; border: 1px solid #c6d8f0; }
+.btn.danger { background: white; color: var(--accent); border-color: var(--accent); }
+.btn.danger:hover { background: var(--accent); color: white; }
 
 .dyn-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 6px; }
 .dyn-table th { background: var(--navy); color: white; padding: 6px 8px; font-size: 11px; text-align: left; }
