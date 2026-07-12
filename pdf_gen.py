@@ -258,3 +258,137 @@ def generate_inspection_pdf(inspection_row, client_row, site_row, asset_row=None
 
     doc.build(story)
     return buf.getvalue()
+
+
+def generate_service_call_pdf(call):
+    """Returns PDF bytes for a service call — a printable work order the
+    office can hand to a technician or keep on file. Pre-fills everything
+    known at scheduling time, and leaves blank fill-in lines for the
+    on-site completion details (arrival/departure, work performed,
+    tag/compliance, signatures) modeled on SCFP's own paper work order."""
+    styles = _styles()
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter,
+                             topMargin=0.55 * inch, bottomMargin=0.5 * inch,
+                             leftMargin=0.45 * inch, rightMargin=0.45 * inch)
+    story = []
+
+    # --- Letterhead ---
+    title_text = (call["call_type"] or "Service Call").upper()
+    wo = call["work_order_number"] or f"SCFP-{call['id']}"
+    header_tbl = Table([
+        [Paragraph(title_text, styles["SCFPTitle"]),
+         Paragraph(f"Work Order #{wo}<br/>Date: {call['scheduled_date']}"
+                    f"{' at ' + call['scheduled_time'] if call['scheduled_time'] else ''}",
+                    styles["SCFPMeta"])],
+    ], colWidths=[5.0 * inch, PAGE_WIDTH - 5.0 * inch])
+    header_tbl.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    story.append(header_tbl)
+    story.append(Paragraph(COMPANY_NAME, styles["SCFPCompany"]))
+    story.append(Paragraph(COMPANY_ADDRESS, styles["SCFPSub"]))
+    story.append(Paragraph(f"{COMPANY_PHONE} &nbsp;|&nbsp; {COMPANY_WEB}", styles["SCFPSub"]))
+    story.append(Spacer(1, 12))
+
+    # --- Blush info band: Customer / Site / Work Order Details ---
+    if call["site_id"]:
+        customer_lines = [call["client_name"] or "—"]
+        addr_bits = [call["site_street"], call["site_city"], call["site_state"], call["site_zip"]]
+        site_lines = [call["site_name"] or "—",
+                      ", ".join(b for b in addr_bits if b)]
+    else:
+        customer_lines = [call["customer_name"] or "—"]
+        site_lines = [call["location_address"] or "—"]
+
+    detail_lines = [f"Status: {call['status']}", f"Assigned To: {call['assigned_to_name'] or 'Unassigned'}"]
+
+    band = Table([[
+        _band_cell("Customer", customer_lines, styles),
+        _band_cell("Site / Location", site_lines, styles),
+        _band_cell("Work Order Details", detail_lines, styles),
+    ]], colWidths=[PAGE_WIDTH / 3] * 3)
+    band.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), BAND_BG),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING", (0, 0), (-1, -1), 10),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+        ("LEFTPADDING", (0, 0), (-1, -1), 10),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+    ]))
+    story.append(band)
+    story.append(Spacer(1, 14))
+
+    # --- Contact ---
+    contact_fields = [
+        {"key": "contact_name", "label": "Contact Name", "type": "text"},
+        {"key": "contact_phone", "label": "Contact Phone", "type": "text"},
+    ]
+    contact_data = {"contact_name": call["contact_name"], "contact_phone": call["contact_phone"]}
+    story.append(_section_header("Contact", styles))
+    story.append(Spacer(1, 6))
+    grid = _kv_grid(contact_fields, contact_data, styles)
+    if grid:
+        story.append(grid)
+    story.append(Spacer(1, 4))
+
+    # --- Reason for call ---
+    story.append(_section_header("Reason for Call", styles))
+    story.append(Spacer(1, 6))
+    story.append(Paragraph(call["description"] or "—", styles["SCFPValue"]))
+    if call["notes"]:
+        story.append(Spacer(1, 6))
+        story.append(Paragraph("Office Notes: " + call["notes"], styles["SCFPSub"]))
+    story.append(Spacer(1, 10))
+
+    # --- On-site completion (blank fill-in lines for the technician) ---
+    story.append(_section_header("On-Site Verification — To Be Completed by Technician", styles))
+    story.append(Spacer(1, 6))
+    onsite_tbl = Table([
+        ["Arrival Time: _______________", "Departure Time: _______________"],
+        ["Number of Technicians: _______", "Name(s) of Technician(s): ___________________"],
+    ], colWidths=[PAGE_WIDTH / 2] * 2)
+    onsite_tbl.setStyle(TableStyle([
+        ("FONTSIZE", (0, 0), (-1, -1), 9.5),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    story.append(onsite_tbl)
+    story.append(Spacer(1, 8))
+    story.append(Paragraph("Description of Work Completed (include all work done and materials used):",
+                            styles["SCFPLabel"]))
+    story.append(Spacer(1, 4))
+    blank_box = Table([[""]], colWidths=[PAGE_WIDTH], rowHeights=[0.9 * inch])
+    blank_box.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), 0.6, RULE_GRAY)]))
+    story.append(blank_box)
+    story.append(Spacer(1, 10))
+    yn_tbl = Table([
+        ["Is this system properly tagged and/or compliant?   [   ] Yes     [   ] No"],
+        ["Is a return trip needed?   [   ] Yes     [   ] No     Note: ______________________________"],
+    ], colWidths=[PAGE_WIDTH])
+    yn_tbl.setStyle(TableStyle([
+        ("FONTSIZE", (0, 0), (-1, -1), 9.5),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("LINEBELOW", (0, 0), (-1, 0), 0.4, RULE_GRAY),
+    ]))
+    story.append(yn_tbl)
+
+    # --- Sign-off ---
+    story.append(Spacer(1, 14))
+    story.append(_section_header("Sign-Off", styles))
+    story.append(Spacer(1, 8))
+    sig_tbl = Table([
+        ["Technician's Signature: ___________________________", "Date: ______________"],
+        ["Customer / Manager Name: _________________________", ""],
+        ["Customer / Manager Signature: _____________________", "Date: ______________"],
+    ], colWidths=[5 * inch, PAGE_WIDTH - 5 * inch])
+    sig_tbl.setStyle(TableStyle([
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("TOPPADDING", (0, 0), (-1, -1), 10),
+    ]))
+    story.append(sig_tbl)
+
+    doc.build(story)
+    return buf.getvalue()

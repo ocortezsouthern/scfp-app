@@ -697,7 +697,8 @@ def recent_inspections(limit=20):
 
 SERVICE_CALL_JOIN = """
     SELECT service_calls.*,
-           sites.name AS site_name, sites.city AS site_city,
+           sites.name AS site_name, sites.street AS site_street, sites.city AS site_city,
+           sites.state AS site_state, sites.zip AS site_zip,
            clients.name AS client_name, clients.id AS client_id,
            tech.name AS assigned_to_name,
            creator.name AS created_by_name

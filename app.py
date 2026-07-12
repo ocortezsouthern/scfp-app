@@ -509,6 +509,19 @@ class ServiceCallDetailHandler(BaseHandler):
                          call_statuses=CALL_STATUSES, sites=db.list_sites(), techs=db.list_users())
 
 
+class ServiceCallPdfHandler(BaseHandler):
+    @require_login
+    def get(self, call_id):
+        call = db.get_service_call(int(call_id))
+        if not call:
+            raise tornado.web.HTTPError(404)
+        pdf_bytes = pdf_gen.generate_service_call_pdf(call)
+        self.set_header("Content-Type", "application/pdf")
+        self.set_header("Content-Disposition",
+                         f'inline; filename="SCFP_WorkOrder_{call_id}.pdf"')
+        self.write(pdf_bytes)
+
+
 class ServiceCallEditHandler(BaseHandler):
     @require_login
     def post(self, call_id):
@@ -822,6 +835,7 @@ def make_app():
         (r"/service-calls", ServiceCallsHandler),
         (r"/service-calls/(\d+)", ServiceCallDetailHandler),
         (r"/service-calls/(\d+)/edit", ServiceCallEditHandler),
+        (r"/service-calls/(\d+)/pdf", ServiceCallPdfHandler),
         (r"/service-calls/(\d+)/status", ServiceCallStatusHandler),
         (r"/service-calls/(\d+)/delete", ServiceCallDeleteHandler),
         (r"/inspections", InspectionsListHandler),
