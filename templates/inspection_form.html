@@ -1,33 +1,44 @@
 {% extends "base.html" %}
-{% block title %}Log Inspection — SCFP Inspection Tracker{% endblock %}
+{% block title %}{% if edit_mode %}Edit Inspection{% else %}Log Inspection{% endif %} — SCFP Inspection Tracker{% endblock %}
 
-{% macro simple_field(f) %}
-  {% set val = '' %}
+{% macro simple_field(f, data) %}
+  {% set val = data.get(f.key, '') if data else '' %}
   <label class="field-{{ f.type }}">
     {{ f.label }}
     {% if f.type == 'textarea' %}
       <textarea name="{{ f.key }}">{{ val }}</textarea>
     {% elif f.type == 'yn' %}
-      <select name="{{ f.key }}"><option value="">—</option><option>Yes</option><option>No</option></select>
+      <select name="{{ f.key }}">
+        <option value="">—</option>
+        <option {% if val=='Yes' %}selected{% endif %}>Yes</option>
+        <option {% if val=='No' %}selected{% endif %}>No</option>
+      </select>
     {% elif f.type == 'ynna' %}
-      <select name="{{ f.key }}"><option value="">—</option><option>Yes</option><option>No</option><option>N/A</option></select>
+      <select name="{{ f.key }}">
+        <option value="">—</option>
+        <option {% if val=='Yes' %}selected{% endif %}>Yes</option>
+        <option {% if val=='No' %}selected{% endif %}>No</option>
+        <option {% if val=='N/A' %}selected{% endif %}>N/A</option>
+      </select>
     {% elif f.type == 'select' %}
       <select name="{{ f.key }}">
-        {% for opt in f.options %}<option value="{{ opt }}">{{ opt if opt else '—' }}</option>{% endfor %}
+        {% for opt in f.options %}<option value="{{ opt }}" {% if opt==val %}selected{% endif %}>{{ opt if opt else '—' }}</option>{% endfor %}
       </select>
     {% elif f.type == 'number' %}
-      <input type="number" step="any" name="{{ f.key }}">
+      <input type="number" step="any" name="{{ f.key }}" value="{{ val }}">
     {% elif f.type == 'date' %}
-      <input type="date" name="{{ f.key }}">
+      <input type="date" name="{{ f.key }}" value="{{ val }}">
     {% else %}
-      <input type="text" name="{{ f.key }}">
+      <input type="text" name="{{ f.key }}" value="{{ val }}">
     {% endif %}
   </label>
 {% endmacro %}
 
-{% macro table_field(f) %}
+{% macro table_field(f, data) %}
+  {% set existing_rows = (data.get(f.key) if data else None) or [] %}
   <div class="table-field" data-field="{{ f.key }}" data-columns='{{ f.columns|tojson }}'
-       data-default-rows='{{ (f.default_rows or [])|tojson }}'>
+       data-default-rows='{{ (f.default_rows or [])|tojson }}'
+       data-existing-rows='{{ existing_rows|tojson }}'>
     <label class="table-label">{{ f.label }}</label>
     <div class="table-scroll">
       <table class="dyn-table">
@@ -50,24 +61,34 @@
   <a class="btn" href="/clients">Go to Clients</a>
 </div>
 {% else %}
+{% set data = data or {} %}
 <div class="breadcrumb">
   {% if site %}<a href="/sites/{{ site['id'] }}">{{ site['name'] }}</a> / {% endif %}
-  New {{ cfg.label }}
+  {% if edit_mode %}Edit {{ cfg.label }} (#{{ inspection['id'] }}){% else %}New {{ cfg.label }}{% endif %}
 </div>
-<div class="page-head"><h1>{{ cfg.label }}</h1></div>
+<div class="page-head"><h1>{% if edit_mode %}Edit: {% endif %}{{ cfg.label }}</h1></div>
 
-<form method="post" action="/inspections/new" id="inspection-form">
+<form method="post" action="{% if edit_mode %}/inspections/{{ inspection['id'] }}/edit{% else %}/inspections/new{% endif %}" id="inspection-form">
   <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+  {% if not edit_mode %}
   <input type="hidden" name="inspection_type" value="{{ inspection_type }}">
   <input type="hidden" name="site_id" value="{{ site_id }}">
+  {% endif %}
 
   <div class="panel">
     <div class="form-grid">
       <label>Site
-        <select name="site_id_display" disabled>
+        <select disabled>
           <option>{{ site['name'] if site else 'Unknown' }}</option>
         </select>
       </label>
+      {% if edit_mode %}
+      <label>Equipment / Asset
+        <select disabled>
+          <option>{{ inspection['asset_label'] or '— Site-level —' }}</option>
+        </select>
+      </label>
+      {% else %}
       <label>Equipment / Asset
         <select name="asset_id">
           <option value="">— Site-level (no specific asset) —</option>
@@ -76,10 +97,14 @@
           {% endfor %}
         </select>
       </label>
+      {% endif %}
       <label>Inspection Date *
-        <input type="date" name="inspection_date" value="{{ today }}" required>
+        <input type="date" name="inspection_date" value="{{ inspection['inspection_date'] if edit_mode else today }}" required>
       </label>
     </div>
+    {% if edit_mode %}
+    <p class="muted" style="margin-top:10px;margin-bottom:0;">Site, equipment, and inspection type are locked once an inspection is created. If this was logged against the wrong site or equipment, log a fresh inspection instead and leave a note in Comments on this one.</p>
+    {% endif %}
   </div>
 
   {% for section in cfg.sections %}
@@ -87,11 +112,11 @@
     <h2>{{ section.name }}</h2>
     <div class="form-grid">
       {% for f in section.fields %}
-        {% if f.type != 'table' %}{{ simple_field(f) }}{% endif %}
+        {% if f.type != 'table' %}{{ simple_field(f, data) }}{% endif %}
       {% endfor %}
     </div>
     {% for f in section.fields %}
-      {% if f.type == 'table' %}{{ table_field(f) }}{% endif %}
+      {% if f.type == 'table' %}{{ table_field(f, data) }}{% endif %}
     {% endfor %}
   </div>
   {% endfor %}
@@ -99,12 +124,12 @@
   <div class="panel">
     <h2>{{ closing.name }}</h2>
     <div class="form-grid">
-      {% for f in closing.fields %}{{ simple_field(f) }}{% endfor %}
+      {% for f in closing.fields %}{{ simple_field(f, data) }}{% endfor %}
     </div>
   </div>
 
   <div class="form-actions">
-    <button type="submit" class="btn primary large">Save Inspection</button>
+    <button type="submit" class="btn primary large">{% if edit_mode %}Save Changes{% else %}Save Inspection{% endif %}</button>
   </div>
 </form>
 {% endif %}

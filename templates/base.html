@@ -21,6 +21,9 @@
       <input type="text" name="q" placeholder="Search clients / sites…" value="{{ q|default('') }}">
     </form>
     <div class="user-menu">
+      {% if current_user['role'] == 'admin' %}
+      <a href="/admin/backup" title="Download a full backup of the database">Download Backup</a>
+      {% endif %}
       <span>{{ current_user['name'] }}</span>
       <a href="/logout">Log out</a>
     </div>

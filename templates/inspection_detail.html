@@ -14,7 +14,10 @@
 </div>
 <div class="page-head">
   <h1>{{ cfg.label if cfg else inspection['inspection_type'] }}</h1>
-  <a class="btn primary" href="/inspections/{{ inspection['id'] }}/pdf" target="_blank">Download PDF</a>
+  <div class="btn-group">
+    <a class="btn" href="/inspections/{{ inspection['id'] }}/edit">Edit</a>
+    <a class="btn primary" href="/inspections/{{ inspection['id'] }}/pdf" target="_blank">Download PDF</a>
+  </div>
 </div>
 
 <div class="panel">
@@ -23,6 +26,9 @@
         <th>Inspector</th><td>{{ inspection['inspector_name'] or '—' }}</td></tr>
     <tr><th>Asset</th><td>{{ inspection['asset_label'] or '—' }}</td>
         <th>Result</th><td><span class="badge {{ 'badge-fail' if inspection['overall_result']=='Fail' else ('badge-pass' if inspection['overall_result']=='Pass' else '') }}">{{ data.get('overall_result') or '—' }}</span></td></tr>
+    {% if inspection['updated_by_name'] %}
+    <tr><th>Last edited</th><td colspan="3" class="muted">{{ inspection['updated_by_name'] }} on {{ inspection['updated_at'][:10] }}</td></tr>
+    {% endif %}
   </table>
 </div>
 
