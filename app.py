@@ -43,6 +43,10 @@ ASSET_TYPE_LABELS = {
     "backflow": "Backflow Assembly",
     "fire_pump": "Fire Pump",
     "hydrant": "Hydrant",
+    "wet_pipe": "Wet Pipe Sprinkler System",
+    "dry_pipe": "Dry Pipe Sprinkler System",
+    "fire_hose": "Fire Hose",
+    "fire_alarm_panel": "Fire Alarm Panel",
     "other": "Other Equipment",
 }
 
