@@ -673,6 +673,39 @@ INSPECTION_TYPES = {
 }
 
 
+# Maps Asset table columns -> inspection form field keys, so that when you
+# start an inspection against a piece of equipment already on file, its
+# manufacturer/model/serial/etc. get carried over instead of re-typed.
+ASSET_FIELD_MAP = {
+    "backflow": {
+        "manufacturer": "manufacturer",
+        "size": "diameter",
+        "model": "model_number",
+        "serial_number": "serial_number",
+        "location": "physical_location",
+    },
+    "fire_pump": {
+        "manufacturer": "manufacturer",
+        "model": "model_type",
+        "serial_number": "shop_serial",
+    },
+}
+
+
+def asset_prefill_data(asset, inspection_type):
+    """Builds the initial form_data dict for a new inspection from an asset's
+    saved details, using ASSET_FIELD_MAP. Returns {} if there's nothing to map."""
+    mapping = ASSET_FIELD_MAP.get(inspection_type)
+    if not asset or not mapping:
+        return {}
+    data = {}
+    for asset_col, form_key in mapping.items():
+        val = asset[asset_col]
+        if val:
+            data[form_key] = val
+    return data
+
+
 def get_type_config(inspection_type):
     return INSPECTION_TYPES.get(inspection_type)
 
