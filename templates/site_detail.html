@@ -7,6 +7,7 @@
   <div class="btn-group">
     <button class="btn primary" onclick="document.getElementById('log-inspection').classList.toggle('open')">+ Log Inspection</button>
     <button class="btn" onclick="document.getElementById('new-asset').classList.toggle('open')">+ Add Equipment</button>
+    <button class="btn" onclick="document.getElementById('edit-site').classList.toggle('open')">Edit</button>
     {% if current_user['role'] == 'admin' %}
     <form method="post" action="/sites/{{ site['id'] }}/delete" style="display:inline"
           onsubmit="return confirm('Permanently delete {{ site['name'] }}? This will also delete {{ impact.assets }} piece(s) of equipment and {{ impact.inspections }} inspection record(s). This cannot be undone.');">
@@ -26,6 +27,25 @@
   </table>
 </div>
 
+<div id="edit-site" class="collapsible panel">
+  <h2>Edit Site</h2>
+  <form method="post" action="/sites/{{ site['id'] }}/edit" class="form-grid">
+    <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+    <label>Site Name *<input type="text" name="name" value="{{ site['name'] }}" required></label>
+    <label>Store #<input type="text" name="store_number" value="{{ site['store_number'] or '' }}"></label>
+    <label>Street<input type="text" name="street" value="{{ site['street'] or '' }}"></label>
+    <label>City<input type="text" name="city" value="{{ site['city'] or '' }}"></label>
+    <label>State<input type="text" name="state" maxlength="2" value="{{ site['state'] or '' }}"></label>
+    <label>Zip<input type="text" name="zip" value="{{ site['zip'] or '' }}"></label>
+    <label>Jurisdiction<input type="text" name="jurisdiction" value="{{ site['jurisdiction'] or '' }}"></label>
+    <label>Division<input type="text" name="division" value="{{ site['division'] or '' }}"></label>
+    <label>Contact Person<input type="text" name="contact_person" value="{{ site['contact_person'] or '' }}"></label>
+    <label>Contact Phone<input type="text" name="contact_phone" value="{{ site['contact_phone'] or '' }}"></label>
+    <label class="span2">Notes<textarea name="notes">{{ site['notes'] or '' }}</textarea></label>
+    <div class="span2"><button type="submit" class="btn primary">Save Changes</button></div>
+  </form>
+</div>
+
 <div id="log-inspection" class="collapsible panel">
   <h2>Log a New Inspection</h2>
   <form method="get" action="/inspections/new">
@@ -42,7 +62,7 @@
       <select name="asset_id">
         <option value="">— Site-level (no specific asset) —</option>
         {% for a in assets %}
-        <option value="{{ a['id'] }}">{{ a['label'] }}</option>
+        <option value="{{ a['id'] }}">{{ a['label'] }}{% if a['status'] == 'inactive' %} (Out of Service){% endif %}</option>
         {% endfor %}
       </select>
     </label>
@@ -77,17 +97,18 @@
   <section class="panel">
     <h2>Equipment</h2>
     <table class="data-table">
-      <thead><tr><th>Label</th><th>Type</th><th>Serial #</th><th></th></tr></thead>
+      <thead><tr><th>Label</th><th>Type</th><th>Serial #</th><th>Status</th><th></th></tr></thead>
       <tbody>
       {% for a in assets %}
-        <tr>
+        <tr class="{{ 'muted' if a['status'] == 'inactive' else '' }}">
           <td><a href="/assets/{{ a['id'] }}">{{ a['label'] }}</a></td>
           <td>{{ asset_type_labels.get(a['asset_type'], a['asset_type']) }}</td>
           <td>{{ a['serial_number'] or '—' }}</td>
+          <td><span class="badge {{ 'badge-fail' if a['status']=='inactive' else 'badge-pass' }}">{{ 'Out of Service' if a['status']=='inactive' else 'Active' }}</span></td>
           <td><a href="/assets/{{ a['id'] }}">View</a></td>
         </tr>
       {% else %}
-        <tr><td colspan="4" class="muted">No equipment logged yet.</td></tr>
+        <tr><td colspan="5" class="muted">No equipment logged yet.</td></tr>
       {% endfor %}
       </tbody>
     </table>
@@ -128,7 +149,7 @@
           <select name="asset_id">
             <option value="">— Site-level —</option>
             {% for a in assets %}
-            <option value="{{ a['id'] }}">{{ a['label'] }}</option>
+            <option value="{{ a['id'] }}">{{ a['label'] }}{% if a['status'] == 'inactive' %} (Out of Service){% endif %}</option>
             {% endfor %}
           </select>
         </label>

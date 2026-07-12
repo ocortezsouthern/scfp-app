@@ -6,9 +6,10 @@
   <h1>{{ asset['label'] }}</h1>
   <div class="btn-group">
     <a class="btn primary" href="/inspections/new?site_id={{ site['id'] }}&asset_id={{ asset['id'] }}">+ Log Inspection</a>
+    <button class="btn" onclick="document.getElementById('edit-asset').classList.toggle('open')">Edit</button>
     {% if current_user['role'] == 'admin' %}
     <form method="post" action="/assets/{{ asset['id'] }}/delete" style="display:inline"
-          onsubmit="return confirm('Permanently delete {{ asset['label'] }}? This will also delete {{ impact.inspections }} inspection record(s) logged against it. This cannot be undone.');">
+          onsubmit="return confirm('Permanently delete {{ asset['label'] }}? This will also delete {{ impact.inspections }} inspection record(s) logged against it. This cannot be undone. If this equipment was just replaced or retired, consider using Edit → Out of Service instead, so its inspection history is kept.');">
       <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
       <button type="submit" class="btn danger">Delete Equipment</button>
     </form>
@@ -18,10 +19,41 @@
 
 <div class="panel">
   <table class="kv-table">
+    <tr><th>Status</th><td><span class="badge {{ 'badge-fail' if asset['status']=='inactive' else 'badge-pass' }}">{{ 'Out of Service' if asset['status']=='inactive' else 'Active' }}</span></td>
+        <th>Type</th><td>{{ asset_type_labels.get(asset['asset_type'], asset['asset_type']) }}</td></tr>
     <tr><th>Manufacturer</th><td>{{ asset['manufacturer'] or '—' }}</td><th>Model</th><td>{{ asset['model'] or '—' }}</td></tr>
     <tr><th>Serial #</th><td>{{ asset['serial_number'] or '—' }}</td><th>Size</th><td>{{ asset['size'] or '—' }}</td></tr>
     <tr><th>Location</th><td>{{ asset['location'] or '—' }}</td><th>Install Date</th><td>{{ asset['install_date'] or '—' }}</td></tr>
   </table>
+</div>
+
+<div id="edit-asset" class="collapsible panel">
+  <h2>Edit Equipment</h2>
+  <form method="post" action="/assets/{{ asset['id'] }}/edit" class="form-grid">
+    <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+    <label>Status
+      <select name="status">
+        <option value="active" {% if asset['status']=='active' %}selected{% endif %}>Active</option>
+        <option value="inactive" {% if asset['status']=='inactive' %}selected{% endif %}>Out of Service</option>
+      </select>
+    </label>
+    <label>Type
+      <select name="asset_type">
+        {% for k, v in asset_type_labels.items() %}
+        <option value="{{ k }}" {% if asset['asset_type']==k %}selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Label *<input type="text" name="label" value="{{ asset['label'] }}" required></label>
+    <label>Location on site<input type="text" name="location" value="{{ asset['location'] or '' }}"></label>
+    <label>Manufacturer<input type="text" name="manufacturer" value="{{ asset['manufacturer'] or '' }}"></label>
+    <label>Model<input type="text" name="model" value="{{ asset['model'] or '' }}"></label>
+    <label>Serial #<input type="text" name="serial_number" value="{{ asset['serial_number'] or '' }}"></label>
+    <label>Size<input type="text" name="size" value="{{ asset['size'] or '' }}"></label>
+    <label>Install Date<input type="date" name="install_date" value="{{ asset['install_date'] or '' }}"></label>
+    <label class="span2">Notes<textarea name="notes">{{ asset['notes'] or '' }}</textarea></label>
+    <div class="span2"><button type="submit" class="btn primary">Save Changes</button></div>
+  </form>
 </div>
 
 <section class="panel">
