@@ -82,7 +82,7 @@
       <td>
         <span class="badge {{ 'badge-pass' if c['status']=='Completed' else ('badge-warn' if c['status']=='In Progress' else '') }}">{{ c['status'] }}</span>
       </td>
-      <td><a href="/service-calls/{{ c['id'] }}">View</a></td>
+      <td><a href="/service-calls/{{ c['id'] }}">View</a> · <a href="/service-calls/{{ c['id'] }}/pdf" target="_blank">PDF</a></td>
     </tr>
   {% else %}
     <tr><td colspan="8" class="muted">No service calls logged yet.</td></tr>

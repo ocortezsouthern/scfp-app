@@ -84,7 +84,7 @@
         <td>{{ c['description'][:60] }}{% if c['description']|length > 60 %}…{% endif %}</td>
         <td>{{ c['assigned_to_name'] or '—' }}</td>
         <td><span class="badge {{ 'badge-warn' if c['status']=='In Progress' else '' }}">{{ c['status'] }}</span></td>
-        <td><a href="/service-calls/{{ c['id'] }}">View</a></td>
+        <td><a href="/service-calls/{{ c['id'] }}">View</a> · <a href="/service-calls/{{ c['id'] }}/pdf" target="_blank">PDF</a></td>
       </tr>
     {% endfor %}
     </tbody>
