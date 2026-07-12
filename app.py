@@ -204,7 +204,22 @@ class ClientDetailHandler(BaseHandler):
         if not client:
             raise tornado.web.HTTPError(404)
         sites = db.list_sites(client_id=int(client_id))
-        self.render_tpl("client_detail.html", client=client, sites=sites)
+        impact = db.client_delete_impact(int(client_id))
+        self.render_tpl("client_detail.html", client=client, sites=sites, impact=impact)
+
+
+class ClientDeleteHandler(BaseHandler):
+    @require_login
+    def post(self, client_id):
+        if self.current_user["role"] != "admin":
+            self.set_status(403)
+            self.write("Only admins can delete clients.")
+            return
+        client_id = int(client_id)
+        if not db.get_client(client_id):
+            raise tornado.web.HTTPError(404)
+        db.delete_client(client_id)
+        self.redirect("/clients")
 
 
 class SiteNewHandler(BaseHandler):
@@ -243,9 +258,26 @@ class SiteDetailHandler(BaseHandler):
         assets = db.list_assets(site_id=site_id)
         schedules = db.list_schedules(site_id=site_id)
         inspections = db.list_inspections(site_id=site_id, limit=25)
+        impact = db.site_delete_impact(site_id)
         self.render_tpl("site_detail.html", site=site, assets=assets, schedules=schedules,
                          inspections=inspections, type_cfg=INSPECTION_TYPES,
-                         asset_type_labels=ASSET_TYPE_LABELS)
+                         asset_type_labels=ASSET_TYPE_LABELS, impact=impact)
+
+
+class SiteDeleteHandler(BaseHandler):
+    @require_login
+    def post(self, site_id):
+        if self.current_user["role"] != "admin":
+            self.set_status(403)
+            self.write("Only admins can delete sites.")
+            return
+        site_id = int(site_id)
+        site = db.get_site(site_id)
+        if not site:
+            raise tornado.web.HTTPError(404)
+        client_id = site["client_id"]
+        db.delete_site(site_id)
+        self.redirect(f"/clients/{client_id}")
 
 
 class AssetNewHandler(BaseHandler):
@@ -281,8 +313,25 @@ class AssetDetailHandler(BaseHandler):
         schedules = db.list_schedules(site_id=asset["site_id"])
         schedules = [s for s in schedules if s["asset_id"] == asset_id]
         inspections = db.list_inspections(asset_id=asset_id, limit=25)
+        impact = db.asset_delete_impact(asset_id)
         self.render_tpl("asset_detail.html", asset=asset, site=site, schedules=schedules,
-                         inspections=inspections, type_cfg=INSPECTION_TYPES)
+                         inspections=inspections, type_cfg=INSPECTION_TYPES, impact=impact)
+
+
+class AssetDeleteHandler(BaseHandler):
+    @require_login
+    def post(self, asset_id):
+        if self.current_user["role"] != "admin":
+            self.set_status(403)
+            self.write("Only admins can delete equipment.")
+            return
+        asset_id = int(asset_id)
+        asset = db.get_asset(asset_id)
+        if not asset:
+            raise tornado.web.HTTPError(404)
+        site_id = asset["site_id"]
+        db.delete_asset(asset_id)
+        self.redirect(f"/sites/{site_id}")
 
 
 class ScheduleSetHandler(BaseHandler):
@@ -543,10 +592,13 @@ def make_app():
         (r"/users", UsersHandler),
         (r"/clients", ClientsHandler),
         (r"/clients/(\d+)", ClientDetailHandler),
+        (r"/clients/(\d+)/delete", ClientDeleteHandler),
         (r"/clients/(\d+)/sites/new", SiteNewHandler),
         (r"/sites/(\d+)", SiteDetailHandler),
+        (r"/sites/(\d+)/delete", SiteDeleteHandler),
         (r"/sites/(\d+)/assets/new", AssetNewHandler),
         (r"/assets/(\d+)", AssetDetailHandler),
+        (r"/assets/(\d+)/delete", AssetDeleteHandler),
         (r"/schedules/set", ScheduleSetHandler),
         (r"/inspections", InspectionsListHandler),
         (r"/inspections/new", InspectionNewHandler),

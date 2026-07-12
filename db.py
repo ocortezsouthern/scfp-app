@@ -249,6 +249,30 @@ def get_client(client_id):
     return row
 
 
+def client_delete_impact(client_id):
+    """Counts what would be cascade-deleted along with this client, so a
+    confirmation dialog can warn the user before it happens."""
+    conn = get_conn()
+    sites = conn.execute("SELECT COUNT(*) c FROM sites WHERE client_id = ?", (client_id,)).fetchone()["c"]
+    assets = conn.execute(
+        "SELECT COUNT(*) c FROM assets WHERE site_id IN (SELECT id FROM sites WHERE client_id = ?)",
+        (client_id,),
+    ).fetchone()["c"]
+    inspections = conn.execute(
+        "SELECT COUNT(*) c FROM inspections WHERE site_id IN (SELECT id FROM sites WHERE client_id = ?)",
+        (client_id,),
+    ).fetchone()["c"]
+    conn.close()
+    return {"sites": sites, "assets": assets, "inspections": inspections}
+
+
+def delete_client(client_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM clients WHERE id = ?", (client_id,))
+    conn.commit()
+    conn.close()
+
+
 # ---------- Sites ----------
 
 def create_site(client_id, name, **fields):
@@ -312,6 +336,21 @@ def get_site(site_id):
     return row
 
 
+def site_delete_impact(site_id):
+    conn = get_conn()
+    assets = conn.execute("SELECT COUNT(*) c FROM assets WHERE site_id = ?", (site_id,)).fetchone()["c"]
+    inspections = conn.execute("SELECT COUNT(*) c FROM inspections WHERE site_id = ?", (site_id,)).fetchone()["c"]
+    conn.close()
+    return {"assets": assets, "inspections": inspections}
+
+
+def delete_site(site_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM sites WHERE id = ?", (site_id,))
+    conn.commit()
+    conn.close()
+
+
 # ---------- Assets ----------
 
 def create_asset(site_id, asset_type, label, **fields):
@@ -351,6 +390,20 @@ def get_asset(asset_id):
     row = conn.execute("SELECT * FROM assets WHERE id = ?", (asset_id,)).fetchone()
     conn.close()
     return row
+
+
+def asset_delete_impact(asset_id):
+    conn = get_conn()
+    inspections = conn.execute("SELECT COUNT(*) c FROM inspections WHERE asset_id = ?", (asset_id,)).fetchone()["c"]
+    conn.close()
+    return {"inspections": inspections}
+
+
+def delete_asset(asset_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM assets WHERE id = ?", (asset_id,))
+    conn.commit()
+    conn.close()
 
 
 # ---------- Schedules / Due dates ----------
