@@ -11,7 +11,7 @@
 
 <div id="new-call" class="collapsible panel">
   <h2>Schedule a Service Call / Emergency Call</h2>
-  <p class="muted" style="margin-top:-6px">For a call that just came in — pick the site if it's already in the system, or just type the customer name and address.</p>
+  <p class="muted" style="margin-top:-6px">Pick the site if it's already on file. If it's a new location, either attach it to an existing customer or type a brand-new customer name — we'll create the client/site records for you automatically.</p>
   <form method="post" action="/service-calls" class="form-grid">
     <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
     <input type="hidden" name="back" value="/">
@@ -24,13 +24,22 @@
     </label>
     <label>Site (if already in the system)
       <select name="site_id">
-        <option value="">— Not in system yet / pick below —</option>
+        <option value="">— Not on file yet (fill in below) —</option>
         {% for s in sites %}
         <option value="{{ s['id'] }}">{{ s['client_name'] }} — {{ s['name'] }}{% if s['city'] %} ({{ s['city'] }}){% endif %}</option>
         {% endfor %}
       </select>
     </label>
-    <label>Customer Name <span class="muted">(required if no site picked)</span><input type="text" name="customer_name"></label>
+    <label>Existing Customer <span class="muted">(pick if this is a new location for a current customer)</span>
+      <select name="existing_client_id">
+        <option value="">— Brand-new customer (type name below) —</option>
+        {% for c in clients %}
+        <option value="{{ c['id'] }}">{{ c['name'] }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>New Site / Location Name <span class="muted">(only if the site above isn't on file yet)</span><input type="text" name="new_site_name" placeholder="e.g. Store #12 or Main Location"></label>
+    <label>Customer Name <span class="muted">(required if this is a brand-new customer)</span><input type="text" name="customer_name"></label>
     <label>Location / Address<input type="text" name="location_address"></label>
     <label>Contact Name<input type="text" name="contact_name"></label>
     <label>Contact Phone<input type="text" name="contact_phone"></label>
