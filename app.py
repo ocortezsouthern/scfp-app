@@ -51,7 +51,17 @@ ASSET_TYPE_LABELS = {
 }
 
 CALL_TYPES = ["Emergency Call", "Service Call", "Scheduled Inspection", "Follow-Up"]
-CALL_STATUSES = ["Scheduled", "In Progress", "Completed", "Cancelled"]
+CALL_STATUSES = [
+    "Scheduled",
+    "In Progress",
+    "Completed",
+    "Completed - Repairs Required",
+    "Completed - Return Trip Required",
+    "Cancelled",
+]
+# Statuses that still need follow-up even though work has started/finished —
+# used to color their badges amber instead of "all done" green.
+CALL_STATUSES_NEEDS_FOLLOWUP = ["In Progress", "Completed - Repairs Required", "Completed - Return Trip Required"]
 
 
 class BaseHandler(tornado.web.RequestHandler):
@@ -502,11 +512,65 @@ class ServiceCallsHandler(BaseHandler):
 class ServiceCallDetailHandler(BaseHandler):
     @require_login
     def get(self, call_id):
-        call = db.get_service_call(int(call_id))
+        call_id = int(call_id)
+        call = db.get_service_call(call_id)
         if not call:
             raise tornado.web.HTTPError(404)
         self.render_tpl("service_call_detail.html", call=call, call_types=CALL_TYPES,
-                         call_statuses=CALL_STATUSES, sites=db.list_sites(), techs=db.list_users())
+                         call_statuses=CALL_STATUSES, sites=db.list_sites(), techs=db.list_users(),
+                         attachments=db.list_attachments(call_id), attachment_kinds=db.ATTACHMENT_KINDS)
+
+
+MAX_ATTACHMENT_SIZE = 15 * 1024 * 1024  # 15MB per file — generous for phone photos, PDFs, etc.
+
+
+class ServiceCallAttachmentsHandler(BaseHandler):
+    @require_login
+    def post(self, call_id):
+        call_id = int(call_id)
+        if not db.get_service_call(call_id):
+            raise tornado.web.HTTPError(404)
+        kind = self.get_body_argument("kind", "photo")
+        if kind not in db.ATTACHMENT_KINDS:
+            kind = "other"
+        caption = self.get_body_argument("caption", "")
+        files = self.request.files.get("file", [])
+        skipped = 0
+        for f in files:
+            if len(f["body"]) > MAX_ATTACHMENT_SIZE:
+                skipped += 1
+                continue
+            db.create_attachment(
+                call_id, kind, f["filename"], f["content_type"] or "application/octet-stream",
+                f["body"], caption, self.current_user["id"],
+            )
+        back = f"/service-calls/{call_id}"
+        if skipped:
+            back += f"?skipped={skipped}"
+        self.redirect(back)
+
+
+class ServiceCallAttachmentFileHandler(BaseHandler):
+    @require_login
+    def get(self, call_id, attachment_id):
+        att = db.get_attachment_file(int(attachment_id))
+        if not att or att["service_call_id"] != int(call_id):
+            raise tornado.web.HTTPError(404)
+        self.set_header("Content-Type", att["content_type"] or "application/octet-stream")
+        if not (att["content_type"] or "").startswith("image/"):
+            self.set_header("Content-Disposition", f'attachment; filename="{att["filename"] or "file"}"')
+        self.write(att["file_data"])
+
+
+class ServiceCallAttachmentDeleteHandler(BaseHandler):
+    @require_login
+    def post(self, call_id, attachment_id):
+        call_id = int(call_id)
+        att = db.get_attachment_file(int(attachment_id))
+        if not att or att["service_call_id"] != call_id:
+            raise tornado.web.HTTPError(404)
+        db.delete_attachment(int(attachment_id))
+        self.redirect(f"/service-calls/{call_id}")
 
 
 class ServiceCallPdfHandler(BaseHandler):
@@ -836,6 +900,9 @@ def make_app():
         (r"/service-calls/(\d+)", ServiceCallDetailHandler),
         (r"/service-calls/(\d+)/edit", ServiceCallEditHandler),
         (r"/service-calls/(\d+)/pdf", ServiceCallPdfHandler),
+        (r"/service-calls/(\d+)/attachments", ServiceCallAttachmentsHandler),
+        (r"/service-calls/(\d+)/attachments/(\d+)/file", ServiceCallAttachmentFileHandler),
+        (r"/service-calls/(\d+)/attachments/(\d+)/delete", ServiceCallAttachmentDeleteHandler),
         (r"/service-calls/(\d+)/status", ServiceCallStatusHandler),
         (r"/service-calls/(\d+)/delete", ServiceCallDeleteHandler),
         (r"/inspections", InspectionsListHandler),

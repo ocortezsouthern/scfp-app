@@ -122,6 +122,18 @@ CREATE TABLE IF NOT EXISTS service_calls (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS service_call_attachments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    service_call_id INTEGER NOT NULL REFERENCES service_calls(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL DEFAULT 'photo',   -- photo / material_list / deficiency_report / other
+    filename TEXT,
+    content_type TEXT,
+    file_data BLOB NOT NULL,
+    caption TEXT,
+    uploaded_by INTEGER REFERENCES users(id),
+    uploaded_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_sites_client ON sites(client_id);
 CREATE INDEX IF NOT EXISTS idx_assets_site ON assets(site_id);
 CREATE INDEX IF NOT EXISTS idx_schedules_due ON schedules(next_due_date);
@@ -129,7 +141,15 @@ CREATE INDEX IF NOT EXISTS idx_inspections_site ON inspections(site_id);
 CREATE INDEX IF NOT EXISTS idx_inspections_asset ON inspections(asset_id);
 CREATE INDEX IF NOT EXISTS idx_service_calls_date ON service_calls(scheduled_date);
 CREATE INDEX IF NOT EXISTS idx_service_calls_status ON service_calls(status);
+CREATE INDEX IF NOT EXISTS idx_sc_attachments_call ON service_call_attachments(service_call_id);
 """
+
+ATTACHMENT_KINDS = {
+    "photo": "Photo",
+    "material_list": "Material List",
+    "deficiency_report": "Deficiency Report",
+    "other": "Other",
+}
 
 
 def get_conn():
@@ -830,5 +850,57 @@ def count_open_service_calls():
 def delete_service_call(call_id):
     conn = get_conn()
     conn.execute("DELETE FROM service_calls WHERE id = ?", (call_id,))
+    conn.commit()
+    conn.close()
+
+
+# ---------- Service Call Attachments (photos, material lists, deficiency reports) ----------
+
+def create_attachment(service_call_id, kind, filename, content_type, file_data, caption="", uploaded_by=None):
+    conn = get_conn()
+    cur = conn.execute(
+        """
+        INSERT INTO service_call_attachments
+        (service_call_id, kind, filename, content_type, file_data, caption, uploaded_by, uploaded_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (service_call_id, kind, filename, content_type, file_data, caption, uploaded_by, now_iso()),
+    )
+    conn.commit()
+    aid = cur.lastrowid
+    conn.close()
+    return aid
+
+
+def list_attachments(service_call_id):
+    """Lists attachment metadata (no file bytes) — kept light since each
+    attachment's image/file is fetched separately by its own <img>/link."""
+    conn = get_conn()
+    rows = conn.execute(
+        """
+        SELECT service_call_attachments.id, service_call_id, kind, filename, content_type,
+               caption, uploaded_at, length(file_data) AS size_bytes,
+               users.name AS uploaded_by_name
+        FROM service_call_attachments
+        LEFT JOIN users ON users.id = service_call_attachments.uploaded_by
+        WHERE service_call_id = ?
+        ORDER BY uploaded_at DESC
+        """,
+        (service_call_id,),
+    ).fetchall()
+    conn.close()
+    return rows
+
+
+def get_attachment_file(attachment_id):
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM service_call_attachments WHERE id = ?", (attachment_id,)).fetchone()
+    conn.close()
+    return row
+
+
+def delete_attachment(attachment_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM service_call_attachments WHERE id = ?", (attachment_id,))
     conn.commit()
     conn.close()
