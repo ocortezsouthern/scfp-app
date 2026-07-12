@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Service Call — SCFP Inspection Tracker{% endblock %}
+{% block content %}
+<div class="breadcrumb"><a href="/service-calls">Service Calls</a> / #{{ call['id'] }}</div>
+<div class="page-head">
+  <h1>{{ call['call_type'] }} — {% if call['site_id'] %}{{ call['site_name'] }}{% else %}{{ call['customer_name'] or 'Service Call' }}{% endif %}</h1>
+  <div class="btn-group">
+    <button class="btn" onclick="document.getElementById('edit-call').classList.toggle('open')">Edit</button>
+    {% if current_user['role'] == 'admin' %}
+    <form method="post" action="/service-calls/{{ call['id'] }}/delete" style="display:inline"
+          onsubmit="return confirm('Permanently delete this service call? This cannot be undone.');">
+      <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+      <button type="submit" class="btn danger">Delete</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="panel">
+  <table class="kv-table">
+    <tr><th>Status</th><td><span class="badge {{ 'badge-pass' if call['status']=='Completed' else ('badge-warn' if call['status']=='In Progress' else '') }}">{{ call['status'] }}</span></td>
+        <th>Type</th><td><span class="badge {{ 'badge-fail' if call['call_type']=='Emergency Call' else 'badge-info' }}">{{ call['call_type'] }}</span></td></tr>
+    <tr><th>Scheduled</th><td>{{ call['scheduled_date'] }}{% if call['scheduled_time'] %} at {{ call['scheduled_time'] }}{% endif %}</td>
+        <th>Assigned To</th><td>{{ call['assigned_to_name'] or 'Unassigned' }}</td></tr>
+    <tr><th>Customer / Site</th><td>{% if call['site_id'] %}<a href="/sites/{{ call['site_id'] }}">{{ call['client_name'] }} — {{ call['site_name'] }}</a>{% else %}{{ call['customer_name'] or '—' }}{% endif %}</td>
+        <th>Location / Address</th><td>{{ call['location_address'] or '—' }}</td></tr>
+    <tr><th>Contact</th><td>{{ call['contact_name'] or '—' }} {{ call['contact_phone'] or '' }}</td>
+        <th>Work Order / PO #</th><td>{{ call['work_order_number'] or '—' }}</td></tr>
+    <tr><th>Logged By</th><td>{{ call['created_by_name'] or '—' }}</td>
+        <th>Logged On</th><td>{{ call['created_at'][:10] if call['created_at'] else '—' }}</td></tr>
+  </table>
+</div>
+
+<div class="panel">
+  <h2>Description</h2>
+  <p>{{ call['description'] or '—' }}</p>
+  {% if call['notes'] %}
+  <h3 class="table-title">Notes</h3>
+  <p>{{ call['notes'] }}</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2>Update Status</h2>
+  <div class="btn-group">
+    {% for st in call_statuses %}
+    <form method="post" action="/service-calls/{{ call['id'] }}/status" style="display:inline">
+      <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+      <input type="hidden" name="status" value="{{ st }}">
+      <input type="hidden" name="back" value="/service-calls/{{ call['id'] }}">
+      <button type="submit" class="btn {{ 'primary' if st == call['status'] else '' }} small">{{ st }}</button>
+    </form>
+    {% endfor %}
+  </div>
+</div>
+
+<div id="edit-call" class="collapsible panel">
+  <h2>Edit Service Call</h2>
+  <form method="post" action="/service-calls/{{ call['id'] }}/edit" class="form-grid">
+    <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+    <label>Call Type
+      <select name="call_type">
+        {% for ct in call_types %}
+        <option value="{{ ct }}" {% if ct == call['call_type'] %}selected{% endif %}>{{ ct }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Status
+      <select name="status">
+        {% for st in call_statuses %}
+        <option value="{{ st }}" {% if st == call['status'] %}selected{% endif %}>{{ st }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Site
+      <select name="site_id">
+        <option value="">— Not in system / use customer name below —</option>
+        {% for s in sites %}
+        <option value="{{ s['id'] }}" {% if call['site_id'] == s['id'] %}selected{% endif %}>{{ s['client_name'] }} — {{ s['name'] }}{% if s['city'] %} ({{ s['city'] }}){% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Customer Name<input type="text" name="customer_name" value="{{ call['customer_name'] or '' }}"></label>
+    <label>Location / Address<input type="text" name="location_address" value="{{ call['location_address'] or '' }}"></label>
+    <label>Contact Name<input type="text" name="contact_name" value="{{ call['contact_name'] or '' }}"></label>
+    <label>Contact Phone<input type="text" name="contact_phone" value="{{ call['contact_phone'] or '' }}"></label>
+    <label>Scheduled Date *<input type="date" name="scheduled_date" value="{{ call['scheduled_date'] }}" required></label>
+    <label>Scheduled Time<input type="time" name="scheduled_time" value="{{ call['scheduled_time'] or '' }}"></label>
+    <label>Assign To
+      <select name="assigned_to">
+        <option value="">— Unassigned —</option>
+        {% for t in techs %}
+        <option value="{{ t['id'] }}" {% if call['assigned_to'] == t['id'] %}selected{% endif %}>{{ t['name'] }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Work Order / PO #<input type="text" name="work_order_number" value="{{ call['work_order_number'] or '' }}"></label>
+    <label class="span2">What's needed / reason for the call *<textarea name="description" required>{{ call['description'] or '' }}</textarea></label>
+    <label class="span2">Notes<textarea name="notes">{{ call['notes'] or '' }}</textarea></label>
+    <div class="span2"><button type="submit" class="btn primary">Save Changes</button></div>
+  </form>
+</div>
+{% endblock %}

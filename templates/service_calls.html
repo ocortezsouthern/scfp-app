@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Service Calls — SCFP Inspection Tracker{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Service Calls</h1>
+  <button class="btn primary" onclick="document.getElementById('new-call').classList.toggle('open')">+ Schedule a Call</button>
+</div>
+
+<div id="new-call" class="collapsible panel">
+  <h2>Schedule a Service Call / Emergency Call</h2>
+  <p class="muted" style="margin-top:-6px">For a call that just came in — pick the site if it's already in the system, or just type the customer name and address.</p>
+  <form method="post" action="/service-calls" class="form-grid">
+    <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+    <input type="hidden" name="back" value="/service-calls">
+    <label>Call Type
+      <select name="call_type">
+        {% for ct in call_types %}
+        <option value="{{ ct }}" {% if ct == 'Emergency Call' %}selected{% endif %}>{{ ct }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Site (if already in the system)
+      <select name="site_id">
+        <option value="">— Not in system yet / pick below —</option>
+        {% for s in sites %}
+        <option value="{{ s['id'] }}">{{ s['client_name'] }} — {{ s['name'] }}{% if s['city'] %} ({{ s['city'] }}){% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Customer Name <span class="muted">(required if no site picked)</span><input type="text" name="customer_name"></label>
+    <label>Location / Address<input type="text" name="location_address"></label>
+    <label>Contact Name<input type="text" name="contact_name"></label>
+    <label>Contact Phone<input type="text" name="contact_phone"></label>
+    <label>Scheduled Date *<input type="date" name="scheduled_date" value="{{ today }}" required></label>
+    <label>Scheduled Time<input type="time" name="scheduled_time"></label>
+    <label>Assign To
+      <select name="assigned_to">
+        <option value="">— Unassigned —</option>
+        {% for t in techs %}
+        <option value="{{ t['id'] }}">{{ t['name'] }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Work Order / PO #<input type="text" name="work_order_number"></label>
+    <label class="span2">What's needed / reason for the call *<textarea name="description" required placeholder="e.g. Pull station activated, no fire — needs reset and inspection"></textarea></label>
+    <div class="span2"><button type="submit" class="btn primary">Add to Tracker</button></div>
+  </form>
+</div>
+
+<form method="get" action="/service-calls" class="inline-search">
+  <select name="status">
+    <option value="">All statuses</option>
+    {% for st in call_statuses %}
+    <option value="{{ st }}" {% if st == selected_status %}selected{% endif %}>{{ st }}</option>
+    {% endfor %}
+  </select>
+  <button class="btn" type="submit">Filter</button>
+  {% if selected_status %}<a class="btn" href="/service-calls">Clear</a>{% endif %}
+</form>
+
+<div class="table-scroll">
+<table class="data-table">
+  <thead><tr><th>Date</th><th>Type</th><th>Customer / Site</th><th>Description</th><th>Assigned</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+  {% for c in calls %}
+    <tr>
+      <td class="{{ 'overdue' if c['scheduled_date'] < today and c['status'] not in ['Completed', 'Cancelled'] else '' }}">{{ c['scheduled_date'] }}{% if c['scheduled_time'] %} {{ c['scheduled_time'] }}{% endif %}</td>
+      <td><span class="badge {{ 'badge-fail' if c['call_type']=='Emergency Call' else 'badge-info' }}">{{ c['call_type'] }}</span></td>
+      <td>{% if c['site_id'] %}<a href="/sites/{{ c['site_id'] }}">{{ c['client_name'] }} — {{ c['site_name'] }}</a>{% else %}{{ c['customer_name'] or '—' }}{% endif %}</td>
+      <td>{{ c['description'][:60] }}{% if c['description']|length > 60 %}…{% endif %}</td>
+      <td>{{ c['assigned_to_name'] or '—' }}</td>
+      <td>
+        <span class="badge {{ 'badge-pass' if c['status']=='Completed' else ('badge-warn' if c['status']=='In Progress' else '') }}">{{ c['status'] }}</span>
+      </td>
+      <td><a href="/service-calls/{{ c['id'] }}">View</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="7" class="muted">No service calls logged yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}
