@@ -44,7 +44,7 @@
         {% endfor %}
       </select>
     </label>
-    <label>Work Order / PO #<input type="text" name="work_order_number"></label>
+    <label>Work Order / PO # <span class="muted">(auto-suggested — edit or paste a customer PO #)</span><input type="text" name="work_order_number" value="{{ suggested_wo }}"></label>
     <label class="span2">What's needed / reason for the call *<textarea name="description" required placeholder="e.g. Pull station activated, no fire — needs reset and inspection"></textarea></label>
     <div class="span2"><button type="submit" class="btn primary">Add to Tracker</button></div>
   </form>
@@ -64,11 +64,12 @@
   {% if upcoming_calls %}
   <div class="table-scroll">
 <table class="data-table">
-    <thead><tr><th>Date</th><th>Type</th><th>Customer / Site</th><th>Description</th><th>Assigned</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Date</th><th>WO / PO #</th><th>Type</th><th>Customer / Site</th><th>Description</th><th>Assigned</th><th>Status</th><th></th></tr></thead>
     <tbody>
     {% for c in upcoming_calls %}
       <tr>
         <td class="{{ 'overdue' if c['scheduled_date'] < today else '' }}">{{ c['scheduled_date'] }}{% if c['scheduled_time'] %} {{ c['scheduled_time'] }}{% endif %}</td>
+        <td>{{ c['work_order_number'] or '—' }}</td>
         <td><span class="badge {{ 'badge-fail' if c['call_type']=='Emergency Call' else 'badge-info' }}">{{ c['call_type'] }}</span></td>
         <td>{% if c['site_id'] %}<a href="/sites/{{ c['site_id'] }}">{{ c['client_name'] }} — {{ c['site_name'] }}</a>{% else %}{{ c['customer_name'] or '—' }}{% endif %}</td>
         <td>{{ c['description'][:60] }}{% if c['description']|length > 60 %}…{% endif %}</td>
