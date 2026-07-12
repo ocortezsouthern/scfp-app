@@ -17,6 +17,13 @@
   <div class="btn-group">
     <a class="btn" href="/inspections/{{ inspection['id'] }}/edit">Edit</a>
     <a class="btn primary" href="/inspections/{{ inspection['id'] }}/pdf" target="_blank">Download PDF</a>
+    {% if current_user['role'] == 'admin' %}
+    <form method="post" action="/inspections/{{ inspection['id'] }}/delete" style="display:inline"
+          onsubmit="return confirm('Permanently delete this inspection? This cannot be undone, and the due-date schedule will be recalculated from any remaining inspections.');">
+      <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+      <button type="submit" class="btn danger">Delete</button>
+    </form>
+    {% endif %}
   </div>
 </div>
 

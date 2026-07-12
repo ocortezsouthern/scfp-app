@@ -68,6 +68,10 @@
 </div>
 <div class="page-head"><h1>{% if edit_mode %}Edit: {% endif %}{{ cfg.label }}</h1></div>
 
+{% if prefilled_from_asset %}
+<div class="notice">Manufacturer, model, serial #, size, and location were pre-filled from this equipment's saved record — double-check them and edit any that changed.</div>
+{% endif %}
+
 <form method="post" action="{% if edit_mode %}/inspections/{{ inspection['id'] }}/edit{% else %}/inspections/new{% endif %}" id="inspection-form">
   <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
   {% if not edit_mode %}
