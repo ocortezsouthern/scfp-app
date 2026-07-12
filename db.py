@@ -117,10 +117,23 @@ def get_conn():
     return conn
 
 
+def _column_exists(conn, table, column):
+    cols = [r["name"] for r in conn.execute(f"PRAGMA table_info({table})")]
+    return column in cols
+
+
+def _migrate(conn):
+    """Small additive schema migrations, safe to re-run on an existing DB with data."""
+    if not _column_exists(conn, "inspections", "updated_by"):
+        conn.execute("ALTER TABLE inspections ADD COLUMN updated_by INTEGER REFERENCES users(id)")
+    conn.commit()
+
+
 def init_db():
     conn = get_conn()
     conn.executescript(SCHEMA)
     conn.commit()
+    _migrate(conn)
     conn.close()
 
 
@@ -454,6 +467,26 @@ def create_inspection(site_id, asset_id, inspection_type, inspector_id, inspecti
     return iid
 
 
+def update_inspection(inspection_id, inspection_date, overall_result, system_impaired,
+                       critical_deficiencies, non_critical_deficiencies, satisfactory,
+                       form_data, updated_by):
+    conn = get_conn()
+    conn.execute(
+        """
+        UPDATE inspections SET
+            inspection_date = ?, overall_result = ?, system_impaired = ?,
+            critical_deficiencies = ?, non_critical_deficiencies = ?, satisfactory = ?,
+            form_data = ?, updated_by = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (inspection_date, overall_result, system_impaired, critical_deficiencies,
+         non_critical_deficiencies, satisfactory, json.dumps(form_data), updated_by,
+         now_iso(), inspection_id),
+    )
+    conn.commit()
+    conn.close()
+
+
 def get_inspection(inspection_id):
     conn = get_conn()
     row = conn.execute(
@@ -461,12 +494,14 @@ def get_inspection(inspection_id):
         SELECT inspections.*, sites.name AS site_name, sites.id AS site_id,
                clients.name AS client_name, clients.id AS client_id,
                assets.label AS asset_label,
-               users.name AS inspector_name
+               users.name AS inspector_name,
+               editor.name AS updated_by_name
         FROM inspections
         JOIN sites ON sites.id = inspections.site_id
         JOIN clients ON clients.id = sites.client_id
         LEFT JOIN assets ON assets.id = inspections.asset_id
         LEFT JOIN users ON users.id = inspections.inspector_id
+        LEFT JOIN users AS editor ON editor.id = inspections.updated_by
         WHERE inspections.id = ?
         """,
         (inspection_id,),

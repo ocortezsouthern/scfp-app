@@ -389,6 +389,53 @@ class InspectionNewHandler(BaseHandler):
         self.redirect(f"/inspections/{iid}")
 
 
+class InspectionEditHandler(BaseHandler):
+    """Edit an already-submitted inspection. Site/asset/type are fixed once
+    created (correcting those means logging a fresh inspection); everything
+    else — the date and every form field — can be corrected here."""
+
+    @require_login
+    def get(self, inspection_id):
+        inspection = db.get_inspection(int(inspection_id))
+        if not inspection:
+            raise tornado.web.HTTPError(404)
+        cfg = get_type_config(inspection["inspection_type"])
+        data = json.loads(inspection["form_data"] or "{}")
+        site = db.get_site(inspection["site_id"])
+        self.render_tpl("inspection_form.html", cfg=cfg, inspection_type=inspection["inspection_type"],
+                         site=site, asset=None, assets=[], closing=CLOSING_SECTION,
+                         site_id=str(inspection["site_id"]), asset_id="",
+                         edit_mode=True, inspection=inspection, data=data)
+
+    @require_login
+    def post(self, inspection_id):
+        inspection_id = int(inspection_id)
+        existing = db.get_inspection(inspection_id)
+        if not existing:
+            raise tornado.web.HTTPError(404)
+        cfg = get_type_config(existing["inspection_type"])
+        inspection_date = self.get_body_argument("inspection_date", existing["inspection_date"])
+
+        data = parse_form_data(self, cfg)
+
+        overall_result = data.get("overall_result", "")
+        system_impaired = 1 if data.get("system_impaired") == "Yes" else 0
+        critical = 1 if data.get("critical_deficiencies") == "Yes" else 0
+        non_critical = 1 if data.get("non_critical_deficiencies") == "Yes" else 0
+        satisfactory = 1 if data.get("satisfactory") == "Yes" else 0
+
+        db.update_inspection(
+            inspection_id, inspection_date, overall_result, system_impaired, critical,
+            non_critical, satisfactory, data, self.current_user["id"],
+        )
+
+        if overall_result != "Incomplete":
+            db.upsert_schedule(existing["site_id"], existing["asset_id"], existing["inspection_type"],
+                                cfg["frequency_months"], inspection_date)
+
+        self.redirect(f"/inspections/{inspection_id}")
+
+
 class InspectionDetailHandler(BaseHandler):
     @require_login
     def get(self, inspection_id):
@@ -437,6 +484,24 @@ class SearchHandler(BaseHandler):
         self.render_tpl("search.html", q=q, clients=clients, sites=sites)
 
 
+# -------------------------------------------------------------- backup ----
+
+class BackupHandler(BaseHandler):
+    @require_login
+    def get(self):
+        if self.current_user["role"] != "admin":
+            self.set_status(403)
+            self.write("Admins only")
+            return
+        if not os.path.exists(db.DB_PATH):
+            raise tornado.web.HTTPError(404, "Database file not found")
+        stamp = datetime.datetime.utcnow().strftime("%Y-%m-%d_%H%M")
+        self.set_header("Content-Type", "application/octet-stream")
+        self.set_header("Content-Disposition", f'attachment; filename="scfp_backup_{stamp}.db"')
+        with open(db.DB_PATH, "rb") as f:
+            self.write(f.read())
+
+
 def make_app():
     settings = dict(
         cookie_secret=os.environ.get("SCFP_COOKIE_SECRET", "dev-secret-change-me-in-production"),
@@ -460,8 +525,10 @@ def make_app():
         (r"/inspections", InspectionsListHandler),
         (r"/inspections/new", InspectionNewHandler),
         (r"/inspections/(\d+)", InspectionDetailHandler),
+        (r"/inspections/(\d+)/edit", InspectionEditHandler),
         (r"/inspections/(\d+)/pdf", InspectionPdfHandler),
         (r"/search", SearchHandler),
+        (r"/admin/backup", BackupHandler),
     ], **settings)
 
 
