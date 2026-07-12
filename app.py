@@ -149,7 +149,8 @@ class DashboardHandler(BaseHandler):
         self.render_tpl("dashboard.html", overdue=overdue, due_soon=due_soon,
                          counts=counts, recent=recent, type_cfg=INSPECTION_TYPES,
                          upcoming_calls=upcoming_calls, sites=db.list_sites(),
-                         techs=db.list_users(), call_types=CALL_TYPES)
+                         techs=db.list_users(), call_types=CALL_TYPES,
+                         suggested_wo=db.next_service_call_wo_number())
 
 
 # -------------------------------------------------------------- users -----
@@ -448,7 +449,8 @@ class ServiceCallsHandler(BaseHandler):
         status = self.get_argument("status", "") or None
         self.render_tpl("service_calls.html", calls=db.list_service_calls(status=status),
                          selected_status=status or "", call_types=CALL_TYPES,
-                         call_statuses=CALL_STATUSES, sites=db.list_sites(), techs=db.list_users())
+                         call_statuses=CALL_STATUSES, sites=db.list_sites(), techs=db.list_users(),
+                         suggested_wo=db.next_service_call_wo_number())
 
     @require_login
     def post(self):

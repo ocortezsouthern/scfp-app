@@ -709,6 +709,30 @@ SERVICE_CALL_JOIN = """
 """
 
 
+WO_PREFIX = "SC-"
+WO_START = 1001
+
+
+def next_service_call_wo_number():
+    """Suggests the next sequential SCFP-generated work order number
+    (e.g. SC-1001, SC-1002...). This is only a starting suggestion — the
+    office can always type over it with a customer-supplied PO/WO # instead.
+    Only considers our own SC-### numbers so it never collides with or gets
+    thrown off by customer PO numbers typed into the same field."""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT work_order_number FROM service_calls WHERE work_order_number LIKE ?",
+        (WO_PREFIX + "%",),
+    ).fetchall()
+    conn.close()
+    highest = WO_START - 1
+    for r in rows:
+        val = (r["work_order_number"] or "")[len(WO_PREFIX):]
+        if val.isdigit():
+            highest = max(highest, int(val))
+    return f"{WO_PREFIX}{highest + 1}"
+
+
 def create_service_call(scheduled_date, description, site_id=None, customer_name="",
                          location_address="", contact_name="", contact_phone="",
                          call_type="Service Call", work_order_number="", scheduled_time="",
