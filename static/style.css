@@ -19,6 +19,7 @@ a:hover { text-decoration: underline; }
 
 .topbar { background: var(--navy); color: white; }
 .topbar-inner { max-width: 1200px; margin: 0 auto; padding: 10px 20px; display: flex; align-items: center; gap: 24px; }
+.topbar-row1, .topbar-collapsible { display: contents; }
 .brand { color: white; font-weight: 700; font-size: 17px; white-space: nowrap; }
 .brand span { font-weight: 400; opacity: .85; }
 .topbar nav { display: flex; gap: 16px; }
@@ -28,6 +29,8 @@ a:hover { text-decoration: underline; }
 .search-form input { width: 100%; max-width: 320px; padding: 6px 10px; border-radius: 4px; border: none; }
 .user-menu { display: flex; align-items: center; gap: 12px; font-size: 13px; color: #dbe4f5; white-space: nowrap; }
 .user-menu a { color: #dbe4f5; }
+.nav-toggle { display: none; background: none; border: none; color: white; font-size: 22px; line-height: 1;
+  cursor: pointer; padding: 4px 8px; }
 
 main { max-width: 1200px; margin: 0 auto; padding: 24px 20px 60px; }
 main.auth-page { max-width: 420px; padding-top: 80px; }
@@ -118,3 +121,64 @@ textarea { min-height: 60px; resize: vertical; }
 .manual-due { margin-top: 14px; font-size: 13px; }
 .manual-due summary { cursor: pointer; color: var(--navy-light); font-weight: 600; }
 .manual-due form { margin-top: 10px; }
+
+/* ============ Mobile / smartphone layout ============ */
+@media (max-width: 780px) {
+  .nav-toggle { display: block; }
+
+  .topbar-inner { flex-wrap: wrap; padding: 10px 16px; gap: 0; }
+  .topbar-row1 { display: flex; width: 100%; justify-content: space-between; align-items: center; }
+  .topbar-collapsible {
+    display: none; flex-direction: column; align-items: stretch; width: 100%;
+    gap: 14px; padding: 14px 0 6px;
+  }
+  .topbar.nav-open .topbar-collapsible { display: flex; }
+  .topbar nav { flex-direction: column; gap: 4px; }
+  .topbar nav a { padding: 8px 4px; font-size: 15px; border-top: 1px solid rgba(255,255,255,.12); }
+  .topbar nav a:first-child { border-top: none; }
+  .search-form input { max-width: 100%; }
+  .user-menu { flex-direction: column; align-items: flex-start; gap: 8px; white-space: normal; }
+
+  main { padding: 16px 14px 50px; }
+  main.auth-page { padding-top: 40px; }
+
+  .page-head { flex-direction: column; align-items: stretch; }
+  .page-head h1 { font-size: 20px; }
+  .btn-group { flex-wrap: wrap; }
+  .btn-group .btn, .btn-group form { flex: 1 1 auto; }
+
+  .panel { padding: 14px; }
+
+  /* iOS Safari auto-zooms on any input with font-size under 16px — keep all
+     inputs at 16px on mobile so tapping into a field doesn't jump the page. */
+  input, select, textarea, .dyn-table td input, .dyn-table td select {
+    font-size: 16px;
+  }
+  .btn { padding: 10px 16px; min-height: 42px; }
+  .btn.small { min-height: 34px; padding: 6px 12px; }
+
+  .form-grid { grid-template-columns: 1fr; }
+  .two-col { grid-template-columns: 1fr; }
+
+  .stat-row { gap: 10px; }
+  .stat-card { flex: 1 1 calc(50% - 10px); min-width: 0; padding: 12px; }
+
+  /* Stack label/value tables (kv-table) instead of forcing 4 narrow columns */
+  table.kv-table, table.kv-table tbody, table.kv-table tr, table.kv-table th, table.kv-table td {
+    display: block; width: auto;
+  }
+  table.kv-table tr { padding: 6px 0; border-bottom: 1px solid var(--border); }
+  table.kv-table th { padding: 0 0 2px; font-size: 11px; text-transform: uppercase; }
+  table.kv-table td { padding: 0 0 8px; }
+  table.kv-table td:last-child { padding-bottom: 0; }
+
+  /* Wide data/dyn tables scroll horizontally rather than squeezing text */
+  .table-scroll, .dyn-table .table-scroll { -webkit-overflow-scrolling: touch; }
+  table.data-table, .dyn-table { min-width: 480px; }
+
+  .inline-search { flex-direction: column; }
+  .inline-search input, .inline-search select { max-width: 100%; }
+
+  .form-actions { padding: 12px 0; }
+  .form-actions .btn.large { width: 100%; }
+}
