@@ -4,7 +4,16 @@
 <div class="breadcrumb"><a href="/clients">Clients</a> / <a href="/clients/{{ site['client_id'] }}">{{ site['client_name'] }}</a> / <a href="/sites/{{ site['id'] }}">{{ site['name'] }}</a> / {{ asset['label'] }}</div>
 <div class="page-head">
   <h1>{{ asset['label'] }}</h1>
-  <a class="btn primary" href="/inspections/new?site_id={{ site['id'] }}&asset_id={{ asset['id'] }}">+ Log Inspection</a>
+  <div class="btn-group">
+    <a class="btn primary" href="/inspections/new?site_id={{ site['id'] }}&asset_id={{ asset['id'] }}">+ Log Inspection</a>
+    {% if current_user['role'] == 'admin' %}
+    <form method="post" action="/assets/{{ asset['id'] }}/delete" style="display:inline"
+          onsubmit="return confirm('Permanently delete {{ asset['label'] }}? This will also delete {{ impact.inspections }} inspection record(s) logged against it. This cannot be undone.');">
+      <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+      <button type="submit" class="btn danger">Delete Equipment</button>
+    </form>
+    {% endif %}
+  </div>
 </div>
 
 <div class="panel">

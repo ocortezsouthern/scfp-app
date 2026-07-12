@@ -7,6 +7,13 @@
   <div class="btn-group">
     <button class="btn primary" onclick="document.getElementById('log-inspection').classList.toggle('open')">+ Log Inspection</button>
     <button class="btn" onclick="document.getElementById('new-asset').classList.toggle('open')">+ Add Equipment</button>
+    {% if current_user['role'] == 'admin' %}
+    <form method="post" action="/sites/{{ site['id'] }}/delete" style="display:inline"
+          onsubmit="return confirm('Permanently delete {{ site['name'] }}? This will also delete {{ impact.assets }} piece(s) of equipment and {{ impact.inspections }} inspection record(s). This cannot be undone.');">
+      <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+      <button type="submit" class="btn danger">Delete Site</button>
+    </form>
+    {% endif %}
   </div>
 </div>
 

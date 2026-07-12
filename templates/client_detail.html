@@ -4,7 +4,16 @@
 <div class="breadcrumb"><a href="/clients">Clients</a> / {{ client['name'] }}</div>
 <div class="page-head">
   <h1>{{ client['name'] }}</h1>
-  <button class="btn primary" onclick="document.getElementById('new-site').classList.toggle('open')">+ New Site</button>
+  <div class="btn-group">
+    <button class="btn primary" onclick="document.getElementById('new-site').classList.toggle('open')">+ New Site</button>
+    {% if current_user['role'] == 'admin' %}
+    <form method="post" action="/clients/{{ client['id'] }}/delete" style="display:inline"
+          onsubmit="return confirm('Permanently delete {{ client['name'] }}? This will also delete {{ impact.sites }} site(s), {{ impact.assets }} piece(s) of equipment, and {{ impact.inspections }} inspection record(s). This cannot be undone.');">
+      <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+      <button type="submit" class="btn danger">Delete Client</button>
+    </form>
+    {% endif %}
+  </div>
 </div>
 
 <div class="panel">
