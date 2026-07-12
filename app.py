@@ -1,0 +1,476 @@
+"""
+SCFP Inspection Tracker - Tornado web app.
+
+Run locally:
+    pip install -r requirements.txt
+    python app.py --port=8888
+
+First run walks you through creating the first admin account at /setup.
+"""
+import os
+import re
+import json
+import datetime
+import argparse
+
+import tornado.ioloop
+import tornado.web
+import jinja2
+
+import db
+import auth
+import pdf_gen
+from forms_config import INSPECTION_TYPES, get_type_config, CLOSING_SECTION, all_types
+
+BASE_DIR = os.path.dirname(__file__)
+JINJA_ENV = jinja2.Environment(
+    loader=jinja2.FileSystemLoader(os.path.join(BASE_DIR, "templates")),
+    autoescape=True,
+)
+
+
+def months_label(m):
+    if m % 12 == 0:
+        y = m // 12
+        return f"Every {y} year" + ("s" if y != 1 else "")
+    return f"Every {m} months"
+
+
+JINJA_ENV.filters["months_label"] = months_label
+
+
+ASSET_TYPE_LABELS = {
+    "backflow": "Backflow Assembly",
+    "fire_pump": "Fire Pump",
+    "hydrant": "Hydrant",
+    "other": "Other Equipment",
+}
+
+
+class BaseHandler(tornado.web.RequestHandler):
+    def get_current_user(self):
+        uid = self.get_secure_cookie("user_id")
+        if not uid:
+            return None
+        return db.get_user(int(uid.decode("utf-8")))
+
+    def render_tpl(self, name, **kwargs):
+        tpl = JINJA_ENV.get_template(name)
+        ctx = dict(
+            current_user=self.current_user,
+            all_types=all_types(),
+            xsrf_token=self.xsrf_token.decode("utf-8"),
+            today=db.today_iso(),
+        )
+        ctx.update(kwargs)
+        self.set_header("Content-Type", "text/html; charset=UTF-8")
+        self.write(tpl.render(**ctx))
+
+    def write_error(self, status_code, **kwargs):
+        self.set_header("Content-Type", "text/html; charset=UTF-8")
+        self.write(f"<h1>{status_code}</h1><p>Something went wrong.</p><a href='/'>Home</a>")
+
+
+def require_login(method):
+    def wrapper(self, *args, **kwargs):
+        if not self.current_user:
+            self.redirect("/login?next=" + self.request.path)
+            return
+        return method(self, *args, **kwargs)
+    return wrapper
+
+
+# ---------------------------------------------------------------- auth ----
+
+class SetupHandler(BaseHandler):
+    def get(self):
+        if db.count_users() > 0:
+            self.redirect("/login")
+            return
+        self.render_tpl("setup.html", error=None)
+
+    def post(self):
+        if db.count_users() > 0:
+            self.redirect("/login")
+            return
+        name = self.get_body_argument("name", "").strip()
+        email = self.get_body_argument("email", "").strip()
+        password = self.get_body_argument("password", "")
+        if not name or not email or len(password) < 6:
+            self.render_tpl("setup.html", error="Please fill all fields; password must be 6+ characters.")
+            return
+        uid = db.create_user(name, email, auth.hash_password(password), role="admin")
+        self.set_secure_cookie("user_id", str(uid))
+        self.redirect("/")
+
+
+class LoginHandler(BaseHandler):
+    def get(self):
+        if db.count_users() == 0:
+            self.redirect("/setup")
+            return
+        self.render_tpl("login.html", error=None, next=self.get_argument("next", "/"))
+
+    def post(self):
+        email = self.get_body_argument("email", "").strip()
+        password = self.get_body_argument("password", "")
+        user = db.get_user_by_email(email)
+        if not user or not auth.verify_password(password, user["password_hash"]):
+            self.render_tpl("login.html", error="Invalid email or password.", next="/")
+            return
+        self.set_secure_cookie("user_id", str(user["id"]))
+        self.redirect(self.get_body_argument("next", "/") or "/")
+
+
+class LogoutHandler(BaseHandler):
+    def get(self):
+        self.clear_cookie("user_id")
+        self.redirect("/login")
+
+
+# ----------------------------------------------------------- dashboard ----
+
+class DashboardHandler(BaseHandler):
+    @require_login
+    def get(self):
+        overdue = db.list_schedules(overdue_only=True)
+        due_soon = [s for s in db.list_schedules(upcoming_days=30) if s["next_due_date"] >= db.today_iso()]
+        counts = db.dashboard_counts()
+        recent = db.recent_inspections(limit=10)
+        self.render_tpl("dashboard.html", overdue=overdue, due_soon=due_soon,
+                         counts=counts, recent=recent, type_cfg=INSPECTION_TYPES)
+
+
+# -------------------------------------------------------------- users -----
+
+class UsersHandler(BaseHandler):
+    @require_login
+    def get(self):
+        self.render_tpl("users.html", users=db.list_users(), error=None)
+
+    @require_login
+    def post(self):
+        if self.current_user["role"] != "admin":
+            self.set_status(403)
+            self.write("Admins only")
+            return
+        name = self.get_body_argument("name", "").strip()
+        email = self.get_body_argument("email", "").strip()
+        password = self.get_body_argument("password", "")
+        role = self.get_body_argument("role", "inspector")
+        cert_number = self.get_body_argument("cert_number", "")
+        phone = self.get_body_argument("phone", "")
+        if not name or not email or len(password) < 6:
+            self.render_tpl("users.html", users=db.list_users(),
+                             error="Name, email, and a 6+ character password are required.")
+            return
+        try:
+            db.create_user(name, email, auth.hash_password(password), role, cert_number, phone)
+        except Exception as e:
+            self.render_tpl("users.html", users=db.list_users(), error=f"Could not create user: {e}")
+            return
+        self.redirect("/users")
+
+
+# ------------------------------------------------------------ clients -----
+
+class ClientsHandler(BaseHandler):
+    @require_login
+    def get(self):
+        search = self.get_argument("q", "").strip()
+        self.render_tpl("clients.html", clients=db.list_clients(search or None), search=search)
+
+    @require_login
+    def post(self):
+        name = self.get_body_argument("name", "").strip()
+        if not name:
+            self.redirect("/clients")
+            return
+        cid = db.create_client(
+            name,
+            contact_name=self.get_body_argument("contact_name", ""),
+            phone=self.get_body_argument("phone", ""),
+            email=self.get_body_argument("email", ""),
+            billing_address=self.get_body_argument("billing_address", ""),
+            notes=self.get_body_argument("notes", ""),
+        )
+        self.redirect(f"/clients/{cid}")
+
+
+class ClientDetailHandler(BaseHandler):
+    @require_login
+    def get(self, client_id):
+        client = db.get_client(int(client_id))
+        if not client:
+            raise tornado.web.HTTPError(404)
+        sites = db.list_sites(client_id=int(client_id))
+        self.render_tpl("client_detail.html", client=client, sites=sites)
+
+
+class SiteNewHandler(BaseHandler):
+    @require_login
+    def post(self, client_id):
+        client_id = int(client_id)
+        name = self.get_body_argument("name", "").strip()
+        if not name:
+            self.redirect(f"/clients/{client_id}")
+            return
+        sid = db.create_site(
+            client_id, name,
+            street=self.get_body_argument("street", ""),
+            city=self.get_body_argument("city", ""),
+            state=self.get_body_argument("state", ""),
+            zip=self.get_body_argument("zip", ""),
+            jurisdiction=self.get_body_argument("jurisdiction", ""),
+            division=self.get_body_argument("division", ""),
+            contact_person=self.get_body_argument("contact_person", ""),
+            contact_phone=self.get_body_argument("contact_phone", ""),
+            store_number=self.get_body_argument("store_number", ""),
+            notes=self.get_body_argument("notes", ""),
+        )
+        self.redirect(f"/sites/{sid}")
+
+
+# -------------------------------------------------------------- sites -----
+
+class SiteDetailHandler(BaseHandler):
+    @require_login
+    def get(self, site_id):
+        site_id = int(site_id)
+        site = db.get_site(site_id)
+        if not site:
+            raise tornado.web.HTTPError(404)
+        assets = db.list_assets(site_id=site_id)
+        schedules = db.list_schedules(site_id=site_id)
+        inspections = db.list_inspections(site_id=site_id, limit=25)
+        self.render_tpl("site_detail.html", site=site, assets=assets, schedules=schedules,
+                         inspections=inspections, type_cfg=INSPECTION_TYPES,
+                         asset_type_labels=ASSET_TYPE_LABELS)
+
+
+class AssetNewHandler(BaseHandler):
+    @require_login
+    def post(self, site_id):
+        site_id = int(site_id)
+        label = self.get_body_argument("label", "").strip()
+        asset_type = self.get_body_argument("asset_type", "other")
+        if not label:
+            self.redirect(f"/sites/{site_id}")
+            return
+        db.create_asset(
+            site_id, asset_type, label,
+            location=self.get_body_argument("location", ""),
+            manufacturer=self.get_body_argument("manufacturer", ""),
+            model=self.get_body_argument("model", ""),
+            serial_number=self.get_body_argument("serial_number", ""),
+            size=self.get_body_argument("size", ""),
+            install_date=self.get_body_argument("install_date", ""),
+            notes=self.get_body_argument("notes", ""),
+        )
+        self.redirect(f"/sites/{site_id}")
+
+
+class AssetDetailHandler(BaseHandler):
+    @require_login
+    def get(self, asset_id):
+        asset_id = int(asset_id)
+        asset = db.get_asset(asset_id)
+        if not asset:
+            raise tornado.web.HTTPError(404)
+        site = db.get_site(asset["site_id"])
+        schedules = db.list_schedules(site_id=asset["site_id"])
+        schedules = [s for s in schedules if s["asset_id"] == asset_id]
+        inspections = db.list_inspections(asset_id=asset_id, limit=25)
+        self.render_tpl("asset_detail.html", asset=asset, site=site, schedules=schedules,
+                         inspections=inspections, type_cfg=INSPECTION_TYPES)
+
+
+class ScheduleSetHandler(BaseHandler):
+    @require_login
+    def post(self):
+        site_id = int(self.get_body_argument("site_id"))
+        asset_id = self.get_body_argument("asset_id", "") or None
+        asset_id = int(asset_id) if asset_id else None
+        inspection_type = self.get_body_argument("inspection_type")
+        next_due_date = self.get_body_argument("next_due_date")
+        cfg = get_type_config(inspection_type)
+        freq = cfg["frequency_months"] if cfg else 12
+        db.set_manual_due_date(site_id, asset_id, inspection_type, freq, next_due_date)
+        back = self.get_body_argument("back", f"/sites/{site_id}")
+        self.redirect(back)
+
+
+# --------------------------------------------------------- inspections ----
+
+TABLE_ROW_RE = re.compile(r"^tbl_(?P<field>[A-Za-z0-9_]+)_(?P<idx>\d+)_(?P<col>[A-Za-z0-9_]+)$")
+
+
+def parse_form_data(handler, cfg):
+    """Reconstructs the form_data dict (incl. table rows) from posted args."""
+    data = {}
+    all_fields = list(CLOSING_SECTION["fields"])
+    if cfg:
+        for section in cfg["sections"]:
+            all_fields.extend(section["fields"])
+
+    simple_keys = {f["key"] for f in all_fields if f["type"] != "table"}
+    table_fields = {f["key"]: f for f in all_fields if f["type"] == "table"}
+
+    for key in simple_keys:
+        val = handler.get_body_argument(key, "")
+        if val != "":
+            data[key] = val
+
+    tables = {}
+    for arg_key in handler.request.body_arguments:
+        m = TABLE_ROW_RE.match(arg_key)
+        if not m:
+            continue
+        field, idx, col = m.group("field"), int(m.group("idx")), m.group("col")
+        if field not in table_fields:
+            continue
+        val = handler.get_body_argument(arg_key, "")
+        tables.setdefault(field, {}).setdefault(idx, {})[col] = val
+
+    for field, idx_map in tables.items():
+        rows = []
+        for idx in sorted(idx_map):
+            row = idx_map[idx]
+            if any(v not in (None, "") for v in row.values()):
+                rows.append(row)
+        if rows:
+            data[field] = rows
+
+    return data
+
+
+class InspectionNewHandler(BaseHandler):
+    @require_login
+    def get(self):
+        inspection_type = self.get_argument("type", "")
+        site_id = self.get_argument("site_id", "")
+        asset_id = self.get_argument("asset_id", "")
+        cfg = get_type_config(inspection_type) if inspection_type else None
+        site = db.get_site(int(site_id)) if site_id else None
+        asset = db.get_asset(int(asset_id)) if asset_id else None
+        assets = db.list_assets(site_id=int(site_id)) if site_id else []
+        self.render_tpl("inspection_form.html", cfg=cfg, inspection_type=inspection_type,
+                         site=site, asset=asset, assets=assets, closing=CLOSING_SECTION,
+                         site_id=site_id, asset_id=asset_id)
+
+    @require_login
+    def post(self):
+        inspection_type = self.get_body_argument("inspection_type")
+        cfg = get_type_config(inspection_type)
+        if not cfg:
+            raise tornado.web.HTTPError(400, "Unknown inspection type")
+        site_id = int(self.get_body_argument("site_id"))
+        asset_id = self.get_body_argument("asset_id", "") or None
+        asset_id = int(asset_id) if asset_id else None
+        inspection_date = self.get_body_argument("inspection_date", db.today_iso())
+
+        data = parse_form_data(self, cfg)
+
+        overall_result = data.get("overall_result", "")
+        system_impaired = 1 if data.get("system_impaired") == "Yes" else 0
+        critical = 1 if data.get("critical_deficiencies") == "Yes" else 0
+        non_critical = 1 if data.get("non_critical_deficiencies") == "Yes" else 0
+        satisfactory = 1 if data.get("satisfactory") == "Yes" else 0
+
+        iid = db.create_inspection(
+            site_id, asset_id, inspection_type, self.current_user["id"], inspection_date,
+            overall_result, system_impaired, critical, non_critical, satisfactory,
+            data, self.current_user["id"],
+        )
+
+        if overall_result != "Incomplete":
+            db.upsert_schedule(site_id, asset_id, inspection_type, cfg["frequency_months"], inspection_date)
+
+        self.redirect(f"/inspections/{iid}")
+
+
+class InspectionDetailHandler(BaseHandler):
+    @require_login
+    def get(self, inspection_id):
+        inspection = db.get_inspection(int(inspection_id))
+        if not inspection:
+            raise tornado.web.HTTPError(404)
+        cfg = get_type_config(inspection["inspection_type"])
+        data = json.loads(inspection["form_data"] or "{}")
+        self.render_tpl("inspection_detail.html", inspection=inspection, cfg=cfg,
+                         data=data, closing=CLOSING_SECTION)
+
+
+class InspectionPdfHandler(BaseHandler):
+    @require_login
+    def get(self, inspection_id):
+        inspection = db.get_inspection(int(inspection_id))
+        if not inspection:
+            raise tornado.web.HTTPError(404)
+        client = db.get_client(inspection["client_id"])
+        site = db.get_site(inspection["site_id"])
+        asset = db.get_asset(inspection["asset_id"]) if inspection["asset_id"] else None
+        pdf_bytes = pdf_gen.generate_inspection_pdf(inspection, client, site, asset)
+        self.set_header("Content-Type", "application/pdf")
+        self.set_header("Content-Disposition",
+                         f'inline; filename="SCFP_Inspection_{inspection_id}.pdf"')
+        self.write(pdf_bytes)
+
+
+class InspectionsListHandler(BaseHandler):
+    @require_login
+    def get(self):
+        inspection_type = self.get_argument("type", "") or None
+        inspections = db.list_inspections(inspection_type=inspection_type, limit=200)
+        self.render_tpl("inspections_list.html", inspections=inspections,
+                         type_cfg=INSPECTION_TYPES, selected_type=inspection_type or "")
+
+
+# -------------------------------------------------------------- search ----
+
+class SearchHandler(BaseHandler):
+    @require_login
+    def get(self):
+        q = self.get_argument("q", "").strip()
+        clients = db.list_clients(q) if q else []
+        sites = db.list_sites(search=q) if q else []
+        self.render_tpl("search.html", q=q, clients=clients, sites=sites)
+
+
+def make_app():
+    settings = dict(
+        cookie_secret=os.environ.get("SCFP_COOKIE_SECRET", "dev-secret-change-me-in-production"),
+        xsrf_cookies=True,
+        static_path=os.path.join(BASE_DIR, "static"),
+        debug=os.environ.get("SCFP_DEBUG", "0") == "1",
+    )
+    return tornado.web.Application([
+        (r"/setup", SetupHandler),
+        (r"/login", LoginHandler),
+        (r"/logout", LogoutHandler),
+        (r"/", DashboardHandler),
+        (r"/users", UsersHandler),
+        (r"/clients", ClientsHandler),
+        (r"/clients/(\d+)", ClientDetailHandler),
+        (r"/clients/(\d+)/sites/new", SiteNewHandler),
+        (r"/sites/(\d+)", SiteDetailHandler),
+        (r"/sites/(\d+)/assets/new", AssetNewHandler),
+        (r"/assets/(\d+)", AssetDetailHandler),
+        (r"/schedules/set", ScheduleSetHandler),
+        (r"/inspections", InspectionsListHandler),
+        (r"/inspections/new", InspectionNewHandler),
+        (r"/inspections/(\d+)", InspectionDetailHandler),
+        (r"/inspections/(\d+)/pdf", InspectionPdfHandler),
+        (r"/search", SearchHandler),
+    ], **settings)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=8888)
+    args = parser.parse_args()
+    db.init_db()
+    app = make_app()
+    app.listen(args.port)
+    print(f"SCFP Inspection Tracker running at http://localhost:{args.port}")
+    tornado.ioloop.IOLoop.current().start()
