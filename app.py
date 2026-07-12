@@ -20,7 +20,7 @@ import jinja2
 import db
 import auth
 import pdf_gen
-from forms_config import INSPECTION_TYPES, get_type_config, CLOSING_SECTION, all_types
+from forms_config import INSPECTION_TYPES, get_type_config, CLOSING_SECTION, all_types, asset_prefill_data
 
 BASE_DIR = os.path.dirname(__file__)
 JINJA_ENV = jinja2.Environment(
@@ -354,9 +354,11 @@ class InspectionNewHandler(BaseHandler):
         site = db.get_site(int(site_id)) if site_id else None
         asset = db.get_asset(int(asset_id)) if asset_id else None
         assets = db.list_assets(site_id=int(site_id)) if site_id else []
+        prefill = asset_prefill_data(asset, inspection_type) if asset else {}
         self.render_tpl("inspection_form.html", cfg=cfg, inspection_type=inspection_type,
                          site=site, asset=asset, assets=assets, closing=CLOSING_SECTION,
-                         site_id=site_id, asset_id=asset_id)
+                         site_id=site_id, asset_id=asset_id, data=prefill,
+                         prefilled_from_asset=bool(prefill))
 
     @require_login
     def post(self):
@@ -448,6 +450,30 @@ class InspectionDetailHandler(BaseHandler):
                          data=data, closing=CLOSING_SECTION)
 
 
+class InspectionDeleteHandler(BaseHandler):
+    """Admin-only: permanently removes an inspection (e.g. an accidental
+    duplicate entry) and recalculates the due-date schedule from whatever
+    inspections of that type remain."""
+
+    @require_login
+    def post(self, inspection_id):
+        if self.current_user["role"] != "admin":
+            self.set_status(403)
+            self.write("Only admins can delete inspections.")
+            return
+        inspection_id = int(inspection_id)
+        inspection = db.get_inspection(inspection_id)
+        if not inspection:
+            raise tornado.web.HTTPError(404)
+        cfg = get_type_config(inspection["inspection_type"])
+        site_id = inspection["site_id"]
+        deleted = db.delete_inspection(inspection_id)
+        if deleted and cfg:
+            db.recompute_schedule(deleted["site_id"], deleted["asset_id"],
+                                   deleted["inspection_type"], cfg["frequency_months"])
+        self.redirect(f"/sites/{site_id}")
+
+
 class InspectionPdfHandler(BaseHandler):
     @require_login
     def get(self, inspection_id):
@@ -526,6 +552,7 @@ def make_app():
         (r"/inspections/new", InspectionNewHandler),
         (r"/inspections/(\d+)", InspectionDetailHandler),
         (r"/inspections/(\d+)/edit", InspectionEditHandler),
+        (r"/inspections/(\d+)/delete", InspectionDeleteHandler),
         (r"/inspections/(\d+)/pdf", InspectionPdfHandler),
         (r"/search", SearchHandler),
         (r"/admin/backup", BackupHandler),

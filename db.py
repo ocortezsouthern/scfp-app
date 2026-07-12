@@ -376,6 +376,54 @@ def upsert_schedule(site_id, asset_id, inspection_type, frequency_months, comple
     return next_due
 
 
+def recompute_schedule(site_id, asset_id, inspection_type, frequency_months):
+    """Recalculates the schedule row from whatever inspections of this type
+    remain (used after a delete/edit so a due date never points at an
+    inspection that no longer exists). Unlike upsert_schedule, this always
+    overwrites — it's meant to reflect ground truth, not just move forward."""
+    conn = get_conn()
+    latest = conn.execute(
+        """
+        SELECT inspection_date FROM inspections
+        WHERE site_id = ? AND asset_id IS ? AND inspection_type = ?
+          AND (overall_result IS NULL OR overall_result != 'Incomplete')
+        ORDER BY inspection_date DESC LIMIT 1
+        """,
+        (site_id, asset_id, inspection_type),
+    ).fetchone()
+    if latest:
+        next_due = add_months(latest["inspection_date"], frequency_months)
+        conn.execute(
+            """
+            INSERT INTO schedules (site_id, asset_id, inspection_type, frequency_months, last_completed_date, next_due_date)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(site_id, asset_id, inspection_type) DO UPDATE SET
+                frequency_months = excluded.frequency_months,
+                last_completed_date = excluded.last_completed_date,
+                next_due_date = excluded.next_due_date
+            """,
+            (site_id, asset_id, inspection_type, frequency_months, latest["inspection_date"], next_due),
+        )
+    else:
+        conn.execute(
+            "DELETE FROM schedules WHERE site_id = ? AND asset_id IS ? AND inspection_type = ?",
+            (site_id, asset_id, inspection_type),
+        )
+    conn.commit()
+    conn.close()
+
+
+def delete_inspection(inspection_id):
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT site_id, asset_id, inspection_type FROM inspections WHERE id = ?", (inspection_id,)
+    ).fetchone()
+    conn.execute("DELETE FROM inspections WHERE id = ?", (inspection_id,))
+    conn.commit()
+    conn.close()
+    return row
+
+
 def set_manual_due_date(site_id, asset_id, inspection_type, frequency_months, next_due_date):
     conn = get_conn()
     conn.execute(
