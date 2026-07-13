@@ -52,6 +52,8 @@
         <button type="button" class="btn small" onclick="scfpSetNow('check_out_time')">Now</button>
       </div>
     </label>
+    <label>Number of Technicians<input type="text" name="num_technicians" value="{{ call['num_technicians'] or '' }}" placeholder="e.g. 2"></label>
+    <label>Name(s) of Technician(s)<input type="text" name="technician_names" value="{{ call['technician_names'] or '' }}" placeholder="e.g. John Smith, Mike Jones"></label>
     <label class="span2">Description of Work Completed<textarea name="work_performed" placeholder="Include all work done and materials used">{{ call['work_performed'] or '' }}</textarea></label>
     <div class="span2"><button type="submit" class="btn primary">Save</button></div>
   </form>
@@ -276,6 +278,41 @@
     <label class="span2">Notes<textarea name="notes">{{ call['notes'] or '' }}</textarea></label>
     <div class="span2"><button type="submit" class="btn primary">Save Changes</button></div>
   </form>
+</div>
+
+<div class="panel">
+  <h2>✍️ Technician Sign-Off</h2>
+  <p class="muted" style="margin-top:-6px">Technician name, signature, and date — this also fills in the printed work order.</p>
+  {% if call['tech_signature'] %}
+  <div class="signed-block">
+    <img class="signature-preview" src="/service-calls/{{ call['id'] }}/tech-signature" alt="Technician signature">
+    <div class="signed-meta">
+      <strong>{{ call['tech_signoff_name'] or '—' }}</strong><br>
+      Signed {{ call['tech_sign_date'] or '—' }}
+    </div>
+  </div>
+  <button type="button" class="btn small" onclick="document.getElementById('call-tech-signoff-form').classList.toggle('open')">Re-sign</button>
+  <div id="call-tech-signoff-form" class="collapsible">
+  {% else %}
+  <div id="call-tech-signoff-form" class="collapsible open">
+  {% endif %}
+    <form method="post" action="/service-calls/{{ call['id'] }}/tech-signoff" class="form-grid" style="margin-top:10px;">
+      <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+      <label>Technician Name<input type="text" name="tech_signoff_name" value="{{ call['tech_signoff_name'] or '' }}"></label>
+      <label>Date<input type="date" name="tech_sign_date" value="{{ call['tech_sign_date'] or today }}"></label>
+      <label class="span2">Signature
+        <div class="signature-pad">
+          <div class="sig-canvas-wrap"><canvas class="signature-canvas"></canvas></div>
+          <div class="sig-actions">
+            <button type="button" class="btn small sig-clear-btn">Clear</button>
+            <span class="muted">Sign with mouse or finger</span>
+          </div>
+          <input type="hidden" name="signature_data" class="signature-data-input">
+        </div>
+      </label>
+      <div class="span2"><button type="submit" class="btn primary">Save Sign-Off</button></div>
+    </form>
+  </div>
 </div>
 
 <div class="panel">
