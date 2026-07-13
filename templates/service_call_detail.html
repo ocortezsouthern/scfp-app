@@ -298,6 +298,9 @@
 <div class="panel">
   <h2>✍️ Technician Sign-Off</h2>
   <p class="muted" style="margin-top:-6px">Technician name, signature, and date — this also fills in the printed work order.</p>
+  {% if linked_inspections %}
+  <p class="muted" style="margin-top:-6px">This work order has {{ linked_inspections|length }} inspection report(s) attached — once both this sign-off and the Manager Sign-Off below are complete, they'll be applied to those reports automatically.</p>
+  {% endif %}
   {% if call['tech_signature'] %}
   <div class="signed-block">
     <img class="signature-preview" src="/service-calls/{{ call['id'] }}/tech-signature" alt="Technician signature">
@@ -333,6 +336,9 @@
 <div class="panel">
   <h2>✍️ Manager Sign-Off</h2>
   <p class="muted" style="margin-top:-6px">Manager name, signature, and date confirming the work described above — this also fills in the printed work order.</p>
+  {% if linked_inspections %}
+  <p class="muted" style="margin-top:-6px">This work order has {{ linked_inspections|length }} inspection report(s) attached — once both this sign-off and the Technician Sign-Off above are complete, they'll be applied to those reports automatically.</p>
+  {% endif %}
   {% if call['manager_signature'] %}
   <div class="signed-block">
     <img class="signature-preview" src="/service-calls/{{ call['id'] }}/signature" alt="Manager signature">
