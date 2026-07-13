@@ -136,6 +136,23 @@
     });
   });
 
+  // Generic Yes/No toggle wiring — shared by the inspection form and any
+  // other page (e.g. service call On-Site Verification) that renders a
+  // yn-input hidden field followed by a .yn-toggle button group.
+  document.querySelectorAll('.yn-toggle').forEach(function (group) {
+    var input = group.previousElementSibling;
+    if (!input || !input.classList.contains('yn-input')) { return; }
+    group.querySelectorAll('.yn-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var already = btn.classList.contains('active');
+        group.querySelectorAll('.yn-btn').forEach(function (b) { b.classList.remove('active'); });
+        input.value = already ? '' : btn.getAttribute('data-value');
+        if (!already) { btn.classList.add('active'); }
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    });
+  });
+
   // Simple tab switcher used by dashboard/expenses/profile pages:
   // buttons carry data-tab-group + data-tab-target, panels carry
   // data-tab-group + data-tab-name.
