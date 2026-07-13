@@ -99,7 +99,8 @@ CREATE TABLE IF NOT EXISTS inspections (
     form_data TEXT NOT NULL,      -- JSON blob of all type-specific fields
     created_by INTEGER REFERENCES users(id),
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    service_call_id INTEGER REFERENCES service_calls(id)   -- set when this inspection was scheduled/started from a service call
 );
 
 CREATE TABLE IF NOT EXISTS service_calls (
@@ -134,6 +135,23 @@ CREATE TABLE IF NOT EXISTS service_call_attachments (
     uploaded_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS repairs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+    asset_id INTEGER REFERENCES assets(id) ON DELETE SET NULL,
+    service_call_id INTEGER REFERENCES service_calls(id) ON DELETE SET NULL,
+    inspection_id INTEGER REFERENCES inspections(id) ON DELETE SET NULL,
+    description TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Open',   -- Open / Completed
+    reported_date TEXT NOT NULL,
+    completed_date TEXT,
+    completed_by INTEGER REFERENCES users(id),
+    notes TEXT,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_sites_client ON sites(client_id);
 CREATE INDEX IF NOT EXISTS idx_assets_site ON assets(site_id);
 CREATE INDEX IF NOT EXISTS idx_schedules_due ON schedules(next_due_date);
@@ -142,6 +160,9 @@ CREATE INDEX IF NOT EXISTS idx_inspections_asset ON inspections(asset_id);
 CREATE INDEX IF NOT EXISTS idx_service_calls_date ON service_calls(scheduled_date);
 CREATE INDEX IF NOT EXISTS idx_service_calls_status ON service_calls(status);
 CREATE INDEX IF NOT EXISTS idx_sc_attachments_call ON service_call_attachments(service_call_id);
+CREATE INDEX IF NOT EXISTS idx_repairs_site ON repairs(site_id);
+CREATE INDEX IF NOT EXISTS idx_repairs_status ON repairs(status);
+CREATE INDEX IF NOT EXISTS idx_repairs_call ON repairs(service_call_id);
 """
 
 ATTACHMENT_KINDS = {
@@ -171,6 +192,9 @@ def _migrate(conn):
         conn.execute("ALTER TABLE inspections ADD COLUMN updated_by INTEGER REFERENCES users(id)")
     if not _column_exists(conn, "assets", "status"):
         conn.execute("ALTER TABLE assets ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
+    if not _column_exists(conn, "inspections", "service_call_id"):
+        conn.execute("ALTER TABLE inspections ADD COLUMN service_call_id INTEGER REFERENCES service_calls(id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_inspections_call ON inspections(service_call_id)")
     conn.commit()
 
 
@@ -616,19 +640,20 @@ def dashboard_counts():
 
 def create_inspection(site_id, asset_id, inspection_type, inspector_id, inspection_date,
                        overall_result, system_impaired, critical_deficiencies,
-                       non_critical_deficiencies, satisfactory, form_data, created_by):
+                       non_critical_deficiencies, satisfactory, form_data, created_by,
+                       service_call_id=None):
     conn = get_conn()
     cur = conn.execute(
         """
         INSERT INTO inspections
         (site_id, asset_id, inspection_type, inspector_id, inspection_date, overall_result,
          system_impaired, critical_deficiencies, non_critical_deficiencies, satisfactory,
-         form_data, created_by, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         form_data, created_by, created_at, updated_at, service_call_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (site_id, asset_id, inspection_type, inspector_id, inspection_date, overall_result,
          system_impaired, critical_deficiencies, non_critical_deficiencies, satisfactory,
-         json.dumps(form_data), created_by, now_iso(), now_iso()),
+         json.dumps(form_data), created_by, now_iso(), now_iso(), service_call_id),
     )
     conn.commit()
     iid = cur.lastrowid
@@ -679,7 +704,7 @@ def get_inspection(inspection_id):
     return row
 
 
-def list_inspections(site_id=None, asset_id=None, inspection_type=None, limit=100):
+def list_inspections(site_id=None, asset_id=None, inspection_type=None, service_call_id=None, limit=100):
     conn = get_conn()
     query = """
         SELECT inspections.*, sites.name AS site_name, clients.name AS client_name,
@@ -700,6 +725,9 @@ def list_inspections(site_id=None, asset_id=None, inspection_type=None, limit=10
     if inspection_type:
         conditions.append("inspections.inspection_type = ?")
         params.append(inspection_type)
+    if service_call_id:
+        conditions.append("inspections.service_call_id = ?")
+        params.append(service_call_id)
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
     query += " ORDER BY inspections.inspection_date DESC, inspections.id DESC LIMIT ?"
@@ -711,6 +739,22 @@ def list_inspections(site_id=None, asset_id=None, inspection_type=None, limit=10
 
 def recent_inspections(limit=20):
     return list_inspections(limit=limit)
+
+
+def previous_inspection(site_id, asset_id, inspection_type, exclude_id):
+    """Finds the most recent earlier inspection of the same type against the
+    same site/asset, for building a previous-vs-current comparison view."""
+    conn = get_conn()
+    row = conn.execute(
+        """
+        SELECT * FROM inspections
+        WHERE site_id = ? AND asset_id IS ? AND inspection_type = ? AND id != ?
+        ORDER BY inspection_date DESC, id DESC LIMIT 1
+        """,
+        (site_id, asset_id, inspection_type, exclude_id),
+    ).fetchone()
+    conn.close()
+    return row
 
 
 # ---------- Service Calls (emergency / ad-hoc work orders) ----------
@@ -820,6 +864,26 @@ def list_service_calls(status=None, upcoming_only=False, site_id=None, limit=200
     return rows
 
 
+FOLLOWUP_STATUSES = ("Completed - Repairs Required", "Completed - Return Trip Required")
+
+
+def list_followup_calls(limit=50):
+    """Calls that were closed out but still need something done — material/parts
+    ordered and a repair completed, or a return trip made. Stays on this list
+    until the office/tech updates the status again (e.g. to Completed)."""
+    conn = get_conn()
+    placeholders = ", ".join("?" for _ in FOLLOWUP_STATUSES)
+    rows = conn.execute(
+        SERVICE_CALL_JOIN + f"""
+        WHERE service_calls.status IN ({placeholders})
+        ORDER BY service_calls.updated_at DESC LIMIT ?
+        """,
+        (*FOLLOWUP_STATUSES, limit),
+    ).fetchall()
+    conn.close()
+    return rows
+
+
 def upcoming_service_calls(days=14, limit=50):
     """Open (not completed/cancelled) calls due within the window, plus anything
     already overdue — sorted soonest first, for the dashboard panel."""
@@ -904,3 +968,174 @@ def delete_attachment(attachment_id):
     conn.execute("DELETE FROM service_call_attachments WHERE id = ?", (attachment_id,))
     conn.commit()
     conn.close()
+
+
+# ---------- Repairs (pending/completed repair log) ----------
+
+REPAIR_JOIN = """
+    SELECT repairs.*, sites.name AS site_name, clients.name AS client_name, clients.id AS client_id,
+           assets.label AS asset_label, creator.name AS created_by_name,
+           completer.name AS completed_by_name
+    FROM repairs
+    JOIN sites ON sites.id = repairs.site_id
+    JOIN clients ON clients.id = sites.client_id
+    LEFT JOIN assets ON assets.id = repairs.asset_id
+    LEFT JOIN users AS creator ON creator.id = repairs.created_by
+    LEFT JOIN users AS completer ON completer.id = repairs.completed_by
+"""
+
+
+def create_repair(site_id, description, asset_id=None, service_call_id=None, inspection_id=None,
+                   reported_date=None, notes="", created_by=None):
+    conn = get_conn()
+    reported_date = reported_date or today_iso()
+    cur = conn.execute(
+        """
+        INSERT INTO repairs
+        (site_id, asset_id, service_call_id, inspection_id, description, status,
+         reported_date, notes, created_by, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 'Open', ?, ?, ?, ?, ?)
+        """,
+        (site_id, asset_id, service_call_id, inspection_id, description, reported_date,
+         notes, created_by, now_iso(), now_iso()),
+    )
+    conn.commit()
+    rid = cur.lastrowid
+    conn.close()
+    return rid
+
+
+def complete_repair(repair_id, completed_by, notes=None, completed_date=None):
+    conn = get_conn()
+    completed_date = completed_date or today_iso()
+    if notes is not None:
+        conn.execute(
+            "UPDATE repairs SET status='Completed', completed_date=?, completed_by=?, notes=?, updated_at=? WHERE id=?",
+            (completed_date, completed_by, notes, now_iso(), repair_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE repairs SET status='Completed', completed_date=?, completed_by=?, updated_at=? WHERE id=?",
+            (completed_date, completed_by, now_iso(), repair_id),
+        )
+    conn.commit()
+    conn.close()
+
+
+def reopen_repair(repair_id):
+    conn = get_conn()
+    conn.execute(
+        "UPDATE repairs SET status='Open', completed_date=NULL, completed_by=NULL, updated_at=? WHERE id=?",
+        (now_iso(), repair_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_repair(repair_id):
+    conn = get_conn()
+    row = conn.execute(REPAIR_JOIN + " WHERE repairs.id = ?", (repair_id,)).fetchone()
+    conn.close()
+    return row
+
+
+def list_repairs(site_id=None, status=None, service_call_id=None, limit=200):
+    conn = get_conn()
+    query = REPAIR_JOIN
+    conditions, params = [], []
+    if site_id:
+        conditions.append("repairs.site_id = ?")
+        params.append(site_id)
+    if status:
+        conditions.append("repairs.status = ?")
+        params.append(status)
+    if service_call_id:
+        conditions.append("repairs.service_call_id = ?")
+        params.append(service_call_id)
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY (repairs.status = 'Open') DESC, repairs.reported_date DESC LIMIT ?"
+    params.append(limit)
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+    return rows
+
+
+def count_open_repairs():
+    conn = get_conn()
+    n = conn.execute("SELECT COUNT(*) c FROM repairs WHERE status = 'Open'").fetchone()["c"]
+    conn.close()
+    return n
+
+
+def delete_repair(repair_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM repairs WHERE id = ?", (repair_id,))
+    conn.commit()
+    conn.close()
+
+
+# ---------- Site activity log (combined history: inspections, calls, repairs) ----------
+
+def site_activity(site_id, limit=200):
+    """Unified, chronological record of everything that has happened at a
+    site — every inspection conducted, every service/emergency call, and
+    every repair (pending or completed) — newest first."""
+    conn = get_conn()
+    events = []
+
+    for r in conn.execute(
+        """
+        SELECT inspections.id AS id, inspections.inspection_date AS date,
+               inspections.inspection_type AS inspection_type, inspections.overall_result AS overall_result,
+               assets.label AS asset_label, users.name AS who
+        FROM inspections
+        LEFT JOIN assets ON assets.id = inspections.asset_id
+        LEFT JOIN users ON users.id = inspections.inspector_id
+        WHERE inspections.site_id = ?
+        """,
+        (site_id,),
+    ).fetchall():
+        events.append({
+            "kind": "inspection", "id": r["id"], "date": r["date"],
+            "inspection_type": r["inspection_type"], "overall_result": r["overall_result"],
+            "asset_label": r["asset_label"], "who": r["who"],
+        })
+
+    for r in conn.execute(
+        """
+        SELECT service_calls.id AS id, service_calls.scheduled_date AS date,
+               service_calls.call_type AS call_type, service_calls.status AS status,
+               service_calls.description AS description, tech.name AS who
+        FROM service_calls
+        LEFT JOIN users AS tech ON tech.id = service_calls.assigned_to
+        WHERE service_calls.site_id = ?
+        """,
+        (site_id,),
+    ).fetchall():
+        events.append({
+            "kind": "service_call", "id": r["id"], "date": r["date"],
+            "call_type": r["call_type"], "status": r["status"],
+            "description": r["description"], "who": r["who"],
+        })
+
+    for r in conn.execute(
+        """
+        SELECT repairs.id AS id, repairs.status AS status, repairs.description AS description,
+               repairs.reported_date AS reported_date, repairs.completed_date AS completed_date,
+               assets.label AS asset_label
+        FROM repairs
+        LEFT JOIN assets ON assets.id = repairs.asset_id
+        WHERE repairs.site_id = ?
+        """,
+        (site_id,),
+    ).fetchall():
+        events.append({
+            "kind": "repair", "id": r["id"], "date": r["completed_date"] or r["reported_date"],
+            "status": r["status"], "description": r["description"], "asset_label": r["asset_label"],
+            "reported_date": r["reported_date"], "completed_date": r["completed_date"],
+        })
+
+    conn.close()
+    events.sort(key=lambda e: (e["date"] or "", e["id"]), reverse=True)
+    return events[:limit]

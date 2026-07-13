@@ -154,13 +154,17 @@ class DashboardHandler(BaseHandler):
         due_soon = [s for s in db.list_schedules(upcoming_days=30, active_only=True) if s["next_due_date"] >= db.today_iso()]
         counts = db.dashboard_counts()
         counts["open_calls"] = db.count_open_service_calls()
+        counts["open_repairs"] = db.count_open_repairs()
         recent = db.recent_inspections(limit=10)
         upcoming_calls = db.upcoming_service_calls(days=14)
+        followup_calls = db.list_followup_calls()
+        open_repairs = db.list_repairs(status="Open", limit=15)
         self.render_tpl("dashboard.html", overdue=overdue, due_soon=due_soon,
                          counts=counts, recent=recent, type_cfg=INSPECTION_TYPES,
                          upcoming_calls=upcoming_calls, sites=db.list_sites(),
                          techs=db.list_users(), call_types=CALL_TYPES,
                          clients=db.list_clients(),
+                         followup_calls=followup_calls, open_repairs=open_repairs,
                          suggested_wo=db.next_service_call_wo_number())
 
 
@@ -304,9 +308,12 @@ class SiteDetailHandler(BaseHandler):
         schedules = db.list_schedules(site_id=site_id)
         inspections = db.list_inspections(site_id=site_id, limit=25)
         impact = db.site_delete_impact(site_id)
+        activity = db.site_activity(site_id)
+        open_repairs = db.list_repairs(site_id=site_id, status="Open")
         self.render_tpl("site_detail.html", site=site, assets=assets, schedules=schedules,
                          inspections=inspections, type_cfg=INSPECTION_TYPES,
-                         asset_type_labels=ASSET_TYPE_LABELS, impact=impact)
+                         asset_type_labels=ASSET_TYPE_LABELS, impact=impact,
+                         activity=activity, open_repairs=open_repairs)
 
 
 class SiteDeleteHandler(BaseHandler):
@@ -374,6 +381,35 @@ class AssetNewHandler(BaseHandler):
         self.redirect(f"/sites/{site_id}")
 
 
+def with_trend(inspections):
+    """Annotates a DESC-ordered list of inspection rows with how each result
+    compares to the previous (older) inspection of the same type, so a
+    history table can show at a glance whether things are improving,
+    unchanged, or getting worse."""
+    out = []
+    last_seen = {}  # inspection_type -> overall_result of the next-older row
+    for row in reversed(list(inspections)):  # walk oldest -> newest
+        t = row["inspection_type"]
+        prev_result = last_seen.get(t)
+        result = row["overall_result"]
+        if prev_result is None:
+            trend = "first"
+        elif result == prev_result:
+            trend = "same"
+        elif result == "Pass" and prev_result == "Fail":
+            trend = "improved"
+        elif result == "Fail" and prev_result == "Pass":
+            trend = "declined"
+        else:
+            trend = "changed"
+        d = dict(row)
+        d["trend"] = trend
+        out.append(d)
+        last_seen[t] = result
+    out.reverse()  # back to newest -> oldest
+    return out
+
+
 class AssetDetailHandler(BaseHandler):
     @require_login
     def get(self, asset_id):
@@ -384,7 +420,7 @@ class AssetDetailHandler(BaseHandler):
         site = db.get_site(asset["site_id"])
         schedules = db.list_schedules(site_id=asset["site_id"])
         schedules = [s for s in schedules if s["asset_id"] == asset_id]
-        inspections = db.list_inspections(asset_id=asset_id, limit=25)
+        inspections = with_trend(db.list_inspections(asset_id=asset_id, limit=25))
         impact = db.asset_delete_impact(asset_id)
         self.render_tpl("asset_detail.html", asset=asset, site=site, schedules=schedules,
                          inspections=inspections, type_cfg=INSPECTION_TYPES, impact=impact,
@@ -491,7 +527,7 @@ class ServiceCallsHandler(BaseHandler):
 
         assigned_to = self.get_body_argument("assigned_to", "") or None
         assigned_to = int(assigned_to) if assigned_to else None
-        db.create_service_call(
+        call_id = db.create_service_call(
             scheduled_date=scheduled_date,
             description=description,
             site_id=site_id,
@@ -506,6 +542,20 @@ class ServiceCallsHandler(BaseHandler):
             notes=self.get_body_argument("notes", ""),
             created_by=self.current_user["id"],
         )
+
+        # If the office also flagged that this call needs one or more
+        # inspections (wet system, fire pump, backflow, fire alarm, etc.),
+        # walk straight into filling out the first one now — each submitted
+        # form chains to the next requested type, then back to the call.
+        inspection_types = [t for t in self.get_body_arguments("inspection_types") if get_type_config(t)]
+        if inspection_types and site_id:
+            first, rest = inspection_types[0], inspection_types[1:]
+            url = f"/inspections/new?type={first}&site_id={site_id}&service_call_id={call_id}"
+            if rest:
+                url += "&remaining=" + ",".join(rest)
+            self.redirect(url)
+            return
+
         self.redirect(self.get_body_argument("back", "/service-calls"))
 
 
@@ -516,9 +566,13 @@ class ServiceCallDetailHandler(BaseHandler):
         call = db.get_service_call(call_id)
         if not call:
             raise tornado.web.HTTPError(404)
+        site_assets = db.list_assets(site_id=call["site_id"]) if call["site_id"] else []
         self.render_tpl("service_call_detail.html", call=call, call_types=CALL_TYPES,
                          call_statuses=CALL_STATUSES, sites=db.list_sites(), techs=db.list_users(),
-                         attachments=db.list_attachments(call_id), attachment_kinds=db.ATTACHMENT_KINDS)
+                         attachments=db.list_attachments(call_id), attachment_kinds=db.ATTACHMENT_KINDS,
+                         linked_inspections=db.list_inspections(service_call_id=call_id),
+                         repairs=db.list_repairs(service_call_id=call_id), site_assets=site_assets,
+                         type_cfg=INSPECTION_TYPES)
 
 
 MAX_ATTACHMENT_SIZE = 15 * 1024 * 1024  # 15MB per file — generous for phone photos, PDFs, etc.
@@ -642,6 +696,73 @@ class ServiceCallDeleteHandler(BaseHandler):
         self.redirect("/service-calls")
 
 
+# ------------------------------------------------------------- repairs ----
+
+class RepairsListHandler(BaseHandler):
+    @require_login
+    def get(self):
+        status = self.get_argument("status", "Open")
+        status = status if status in ("Open", "Completed") else None
+        self.render_tpl("repairs.html", repairs=db.list_repairs(status=status),
+                         selected_status=status or "")
+
+
+class RepairCreateHandler(BaseHandler):
+    @require_login
+    def post(self):
+        site_id = self.get_body_argument("site_id", "") or None
+        site_id = int(site_id) if site_id else None
+        description = self.get_body_argument("description", "").strip()
+        back = self.get_body_argument("back", "/repairs")
+        if not site_id or not description:
+            self.redirect(back)
+            return
+        asset_id = self.get_body_argument("asset_id", "") or None
+        asset_id = int(asset_id) if asset_id else None
+        service_call_id = self.get_body_argument("service_call_id", "") or None
+        service_call_id = int(service_call_id) if service_call_id else None
+        db.create_repair(
+            site_id, description, asset_id=asset_id, service_call_id=service_call_id,
+            notes=self.get_body_argument("notes", ""), created_by=self.current_user["id"],
+        )
+        self.redirect(back)
+
+
+class RepairCompleteHandler(BaseHandler):
+    @require_login
+    def post(self, repair_id):
+        repair_id = int(repair_id)
+        if not db.get_repair(repair_id):
+            raise tornado.web.HTTPError(404)
+        db.complete_repair(repair_id, self.current_user["id"],
+                            notes=self.get_body_argument("notes", None))
+        self.redirect(self.get_body_argument("back", "/repairs"))
+
+
+class RepairReopenHandler(BaseHandler):
+    @require_login
+    def post(self, repair_id):
+        repair_id = int(repair_id)
+        if not db.get_repair(repair_id):
+            raise tornado.web.HTTPError(404)
+        db.reopen_repair(repair_id)
+        self.redirect(self.get_body_argument("back", "/repairs"))
+
+
+class RepairDeleteHandler(BaseHandler):
+    @require_login
+    def post(self, repair_id):
+        if self.current_user["role"] != "admin":
+            self.set_status(403)
+            self.write("Only admins can delete repair entries.")
+            return
+        repair_id = int(repair_id)
+        if not db.get_repair(repair_id):
+            raise tornado.web.HTTPError(404)
+        db.delete_repair(repair_id)
+        self.redirect(self.get_body_argument("back", "/repairs"))
+
+
 # --------------------------------------------------------- inspections ----
 
 TABLE_ROW_RE = re.compile(r"^tbl_(?P<field>[A-Za-z0-9_]+)_(?P<idx>\d+)_(?P<col>[A-Za-z0-9_]+)$")
@@ -692,6 +813,8 @@ class InspectionNewHandler(BaseHandler):
         inspection_type = self.get_argument("type", "")
         site_id = self.get_argument("site_id", "")
         asset_id = self.get_argument("asset_id", "")
+        service_call_id = self.get_argument("service_call_id", "")
+        remaining = self.get_argument("remaining", "")
         cfg = get_type_config(inspection_type) if inspection_type else None
         site = db.get_site(int(site_id)) if site_id else None
         asset = db.get_asset(int(asset_id)) if asset_id else None
@@ -700,7 +823,8 @@ class InspectionNewHandler(BaseHandler):
         self.render_tpl("inspection_form.html", cfg=cfg, inspection_type=inspection_type,
                          site=site, asset=asset, assets=assets, closing=CLOSING_SECTION,
                          site_id=site_id, asset_id=asset_id, data=prefill,
-                         prefilled_from_asset=bool(prefill))
+                         prefilled_from_asset=bool(prefill),
+                         service_call_id=service_call_id, remaining=remaining)
 
     @require_login
     def post(self):
@@ -712,6 +836,9 @@ class InspectionNewHandler(BaseHandler):
         asset_id = self.get_body_argument("asset_id", "") or None
         asset_id = int(asset_id) if asset_id else None
         inspection_date = self.get_body_argument("inspection_date", db.today_iso())
+        service_call_id = self.get_body_argument("service_call_id", "") or None
+        service_call_id = int(service_call_id) if service_call_id else None
+        remaining = self.get_body_argument("remaining", "")
 
         data = parse_form_data(self, cfg)
 
@@ -724,11 +851,28 @@ class InspectionNewHandler(BaseHandler):
         iid = db.create_inspection(
             site_id, asset_id, inspection_type, self.current_user["id"], inspection_date,
             overall_result, system_impaired, critical, non_critical, satisfactory,
-            data, self.current_user["id"],
+            data, self.current_user["id"], service_call_id=service_call_id,
         )
 
         if overall_result != "Incomplete":
             db.upsert_schedule(site_id, asset_id, inspection_type, cfg["frequency_months"], inspection_date)
+
+        # Part of a "schedule + fill in immediately" chain from a service
+        # call — move on to the next requested inspection type, or if this
+        # was the last one, head back to the work order.
+        if remaining:
+            types = [t for t in remaining.split(",") if t]
+            nxt, rest = types[0], types[1:]
+            url = f"/inspections/new?type={nxt}&site_id={site_id}"
+            if service_call_id:
+                url += f"&service_call_id={service_call_id}"
+            if rest:
+                url += "&remaining=" + ",".join(rest)
+            self.redirect(url)
+            return
+        if service_call_id:
+            self.redirect(f"/service-calls/{service_call_id}")
+            return
 
         self.redirect(f"/inspections/{iid}")
 
@@ -780,6 +924,28 @@ class InspectionEditHandler(BaseHandler):
         self.redirect(f"/inspections/{inspection_id}")
 
 
+def build_inspection_diff(cfg, data, prev_data):
+    """Compares this inspection's simple (non-table) fields against the
+    previous inspection of the same type/asset, for a "what changed since
+    last time" panel. Returns (changed_fields, table_fields_changed)."""
+    fields = list(CLOSING_SECTION["fields"])
+    if cfg:
+        for section in cfg["sections"]:
+            fields.extend(section["fields"])
+    changed = []
+    tables_changed = []
+    for f in fields:
+        old_val = prev_data.get(f["key"])
+        new_val = data.get(f["key"])
+        if f["type"] == "table":
+            if (old_val or []) != (new_val or []):
+                tables_changed.append(f["label"])
+            continue
+        if (old_val or "") != (new_val or ""):
+            changed.append({"label": f["label"], "old": old_val, "new": new_val})
+    return changed, tables_changed
+
+
 class InspectionDetailHandler(BaseHandler):
     @require_login
     def get(self, inspection_id):
@@ -788,8 +954,15 @@ class InspectionDetailHandler(BaseHandler):
             raise tornado.web.HTTPError(404)
         cfg = get_type_config(inspection["inspection_type"])
         data = json.loads(inspection["form_data"] or "{}")
+        prev = db.previous_inspection(inspection["site_id"], inspection["asset_id"],
+                                       inspection["inspection_type"], inspection["id"])
+        changed_fields, tables_changed = [], []
+        if prev:
+            prev_data = json.loads(prev["form_data"] or "{}")
+            changed_fields, tables_changed = build_inspection_diff(cfg, data, prev_data)
         self.render_tpl("inspection_detail.html", inspection=inspection, cfg=cfg,
-                         data=data, closing=CLOSING_SECTION)
+                         data=data, closing=CLOSING_SECTION, prev=prev,
+                         changed_fields=changed_fields, tables_changed=tables_changed)
 
 
 class InspectionDeleteHandler(BaseHandler):
@@ -905,6 +1078,11 @@ def make_app():
         (r"/service-calls/(\d+)/attachments/(\d+)/delete", ServiceCallAttachmentDeleteHandler),
         (r"/service-calls/(\d+)/status", ServiceCallStatusHandler),
         (r"/service-calls/(\d+)/delete", ServiceCallDeleteHandler),
+        (r"/repairs", RepairsListHandler),
+        (r"/repairs/new", RepairCreateHandler),
+        (r"/repairs/(\d+)/complete", RepairCompleteHandler),
+        (r"/repairs/(\d+)/reopen", RepairReopenHandler),
+        (r"/repairs/(\d+)/delete", RepairDeleteHandler),
         (r"/inspections", InspectionsListHandler),
         (r"/inspections/new", InspectionNewHandler),
         (r"/inspections/(\d+)", InspectionDetailHandler),
