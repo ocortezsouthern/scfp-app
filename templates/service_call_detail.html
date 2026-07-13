@@ -55,6 +55,21 @@
     <label>Number of Technicians<input type="text" name="num_technicians" value="{{ call['num_technicians'] or '' }}" placeholder="e.g. 2"></label>
     <label>Name(s) of Technician(s)<input type="text" name="technician_names" value="{{ call['technician_names'] or '' }}" placeholder="e.g. John Smith, Mike Jones"></label>
     <label class="span2">Description of Work Completed<textarea name="work_performed" placeholder="Include all work done and materials used">{{ call['work_performed'] or '' }}</textarea></label>
+    <label>Is this system properly tagged and/or compliant?
+      <input type="hidden" name="system_tagged_compliant" value="{{ call['system_tagged_compliant'] or '' }}" class="yn-input">
+      <div class="yn-toggle">
+        <button type="button" class="yn-btn {{ 'active' if call['system_tagged_compliant']=='Yes' else '' }}" data-value="Yes">Yes</button>
+        <button type="button" class="yn-btn {{ 'active' if call['system_tagged_compliant']=='No' else '' }}" data-value="No">No</button>
+      </div>
+    </label>
+    <label>Is a return trip needed?
+      <input type="hidden" name="return_trip_needed" value="{{ call['return_trip_needed'] or '' }}" class="yn-input">
+      <div class="yn-toggle">
+        <button type="button" class="yn-btn {{ 'active' if call['return_trip_needed']=='Yes' else '' }}" data-value="Yes">Yes</button>
+        <button type="button" class="yn-btn {{ 'active' if call['return_trip_needed']=='No' else '' }}" data-value="No">No</button>
+      </div>
+    </label>
+    <label class="span2">Return Trip Note <span class="muted">(optional)</span><input type="text" name="return_trip_note" value="{{ call['return_trip_note'] or '' }}" placeholder="e.g. Waiting on parts"></label>
     <div class="span2"><button type="submit" class="btn primary">Save</button></div>
   </form>
 </div>
