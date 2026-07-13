@@ -3,6 +3,7 @@
 {% block content %}
 <div class="page-head"><h1>Team Members</h1></div>
 {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+{% if reset_ok %}<div class="notice">Password reset. Share the new password with them directly — they can log in with it right away and it works on any device.</div>{% endif %}
 <div class="table-scroll">
 <table class="data-table">
   <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Cert #</th><th>Phone</th></tr></thead>
@@ -37,6 +38,24 @@
     <label>Certified Tester #<input type="text" name="cert_number"></label>
     <label>Phone<input type="text" name="phone"></label>
     <div class="span2"><button type="submit" class="btn primary">Add User</button></div>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Reset a Password</h2>
+  <p class="muted" style="margin-top:-6px">Locked out on a new phone or forgot a password? Set a new one here — it works immediately on any device. Passwords are securely hashed and can never be viewed, only reset.</p>
+  <form method="post" action="/users/reset-password" class="form-grid">
+    <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+    <label>Team Member
+      <select name="user_id" required>
+        <option value="">Select…</option>
+        {% for u in users %}
+        <option value="{{ u['id'] }}">{{ u['name'] }} ({{ u['email'] }})</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>New Password *<input type="password" name="password" required minlength="6"></label>
+    <div class="span2"><button type="submit" class="btn primary">Reset Password</button></div>
   </form>
 </section>
 {% endif %}
