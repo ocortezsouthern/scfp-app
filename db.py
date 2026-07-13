@@ -152,6 +152,28 @@ CREATE TABLE IF NOT EXISTS repairs (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS inspection_attachments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    inspection_id INTEGER NOT NULL REFERENCES inspections(id) ON DELETE CASCADE,
+    filename TEXT,
+    content_type TEXT,
+    file_data BLOB NOT NULL,
+    caption TEXT,
+    uploaded_by INTEGER REFERENCES users(id),
+    uploaded_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS asset_attachments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    filename TEXT,
+    content_type TEXT,
+    file_data BLOB NOT NULL,
+    caption TEXT,
+    uploaded_by INTEGER REFERENCES users(id),
+    uploaded_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_sites_client ON sites(client_id);
 CREATE INDEX IF NOT EXISTS idx_assets_site ON assets(site_id);
 CREATE INDEX IF NOT EXISTS idx_schedules_due ON schedules(next_due_date);
@@ -163,6 +185,8 @@ CREATE INDEX IF NOT EXISTS idx_sc_attachments_call ON service_call_attachments(s
 CREATE INDEX IF NOT EXISTS idx_repairs_site ON repairs(site_id);
 CREATE INDEX IF NOT EXISTS idx_repairs_status ON repairs(status);
 CREATE INDEX IF NOT EXISTS idx_repairs_call ON repairs(service_call_id);
+CREATE INDEX IF NOT EXISTS idx_insp_attachments_insp ON inspection_attachments(inspection_id);
+CREATE INDEX IF NOT EXISTS idx_asset_attachments_asset ON asset_attachments(asset_id);
 """
 
 ATTACHMENT_KINDS = {
@@ -1145,3 +1169,103 @@ def site_activity(site_id, limit=200):
     conn.close()
     events.sort(key=lambda e: (e["date"] or "", e["id"]), reverse=True)
     return events[:limit]
+
+
+# ---------- Inspection attachments (deficiency photos, etc.) ----------
+
+def create_inspection_attachment(inspection_id, filename, content_type, file_data, caption="", uploaded_by=None):
+    conn = get_conn()
+    cur = conn.execute(
+        """
+        INSERT INTO inspection_attachments
+        (inspection_id, filename, content_type, file_data, caption, uploaded_by, uploaded_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (inspection_id, filename, content_type, file_data, caption, uploaded_by, now_iso()),
+    )
+    conn.commit()
+    aid = cur.lastrowid
+    conn.close()
+    return aid
+
+
+def list_inspection_attachments(inspection_id):
+    conn = get_conn()
+    rows = conn.execute(
+        """
+        SELECT inspection_attachments.id, inspection_id, filename, content_type,
+               caption, uploaded_at, length(file_data) AS size_bytes,
+               users.name AS uploaded_by_name
+        FROM inspection_attachments
+        LEFT JOIN users ON users.id = inspection_attachments.uploaded_by
+        WHERE inspection_id = ?
+        ORDER BY uploaded_at DESC
+        """,
+        (inspection_id,),
+    ).fetchall()
+    conn.close()
+    return rows
+
+
+def get_inspection_attachment_file(attachment_id):
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM inspection_attachments WHERE id = ?", (attachment_id,)).fetchone()
+    conn.close()
+    return row
+
+
+def delete_inspection_attachment(attachment_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM inspection_attachments WHERE id = ?", (attachment_id,))
+    conn.commit()
+    conn.close()
+
+
+# ---------- Asset attachments (photos of equipment/devices) ----------
+
+def create_asset_attachment(asset_id, filename, content_type, file_data, caption="", uploaded_by=None):
+    conn = get_conn()
+    cur = conn.execute(
+        """
+        INSERT INTO asset_attachments
+        (asset_id, filename, content_type, file_data, caption, uploaded_by, uploaded_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (asset_id, filename, content_type, file_data, caption, uploaded_by, now_iso()),
+    )
+    conn.commit()
+    aid = cur.lastrowid
+    conn.close()
+    return aid
+
+
+def list_asset_attachments(asset_id):
+    conn = get_conn()
+    rows = conn.execute(
+        """
+        SELECT asset_attachments.id, asset_id, filename, content_type,
+               caption, uploaded_at, length(file_data) AS size_bytes,
+               users.name AS uploaded_by_name
+        FROM asset_attachments
+        LEFT JOIN users ON users.id = asset_attachments.uploaded_by
+        WHERE asset_id = ?
+        ORDER BY uploaded_at DESC
+        """,
+        (asset_id,),
+    ).fetchall()
+    conn.close()
+    return rows
+
+
+def get_asset_attachment_file(attachment_id):
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM asset_attachments WHERE id = ?", (attachment_id,)).fetchone()
+    conn.close()
+    return row
+
+
+def delete_asset_attachment(attachment_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM asset_attachments WHERE id = ?", (attachment_id,))
+    conn.commit()
+    conn.close()

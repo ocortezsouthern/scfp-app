@@ -48,8 +48,14 @@ ASSET_TYPE_LABELS = {
     "dry_pipe": "Dry Pipe Sprinkler System",
     "fire_hose": "Fire Hose",
     "fire_alarm_panel": "Fire Alarm Panel",
+    "waterflow_switch": "Waterflow Switch",
+    "control_valve": "Control Valve",
     "other": "Other Equipment",
 }
+
+# Smaller device-type equipment that gets its own "Devices" panel on the site
+# page instead of being lumped into the main Equipment table.
+DEVICE_ASSET_TYPES = {"waterflow_switch", "control_valve"}
 
 CALL_TYPES = ["Emergency Call", "Service Call", "Scheduled Inspection", "Follow-Up"]
 CALL_STATUSES = [
@@ -306,12 +312,16 @@ class SiteDetailHandler(BaseHandler):
         if not site:
             raise tornado.web.HTTPError(404)
         assets = db.list_assets(site_id=site_id)
+        equipment_assets = [a for a in assets if a["asset_type"] not in DEVICE_ASSET_TYPES]
+        device_assets = [a for a in assets if a["asset_type"] in DEVICE_ASSET_TYPES]
         schedules = db.list_schedules(site_id=site_id)
         inspections = db.list_inspections(site_id=site_id, limit=25)
         impact = db.site_delete_impact(site_id)
         activity = db.site_activity(site_id)
         open_repairs = db.list_repairs(site_id=site_id, status="Open")
-        self.render_tpl("site_detail.html", site=site, assets=assets, schedules=schedules,
+        self.render_tpl("site_detail.html", site=site, assets=assets,
+                         equipment_assets=equipment_assets, device_assets=device_assets,
+                         schedules=schedules,
                          inspections=inspections, type_cfg=INSPECTION_TYPES,
                          asset_type_labels=ASSET_TYPE_LABELS, impact=impact,
                          activity=activity, open_repairs=open_repairs)
@@ -423,9 +433,10 @@ class AssetDetailHandler(BaseHandler):
         schedules = [s for s in schedules if s["asset_id"] == asset_id]
         inspections = with_trend(db.list_inspections(asset_id=asset_id, limit=25))
         impact = db.asset_delete_impact(asset_id)
+        attachments = db.list_asset_attachments(asset_id)
         self.render_tpl("asset_detail.html", asset=asset, site=site, schedules=schedules,
                          inspections=inspections, type_cfg=INSPECTION_TYPES, impact=impact,
-                         asset_type_labels=ASSET_TYPE_LABELS)
+                         asset_type_labels=ASSET_TYPE_LABELS, attachments=attachments)
 
 
 class AssetDeleteHandler(BaseHandler):
@@ -626,6 +637,98 @@ class ServiceCallAttachmentDeleteHandler(BaseHandler):
             raise tornado.web.HTTPError(404)
         db.delete_attachment(int(attachment_id))
         self.redirect(f"/service-calls/{call_id}")
+
+
+class InspectionAttachmentsHandler(BaseHandler):
+    @require_login
+    def post(self, inspection_id):
+        inspection_id = int(inspection_id)
+        if not db.get_inspection(inspection_id):
+            raise tornado.web.HTTPError(404)
+        caption = self.get_body_argument("caption", "")
+        files = self.request.files.get("file", [])
+        skipped = 0
+        for f in files:
+            if len(f["body"]) > MAX_ATTACHMENT_SIZE:
+                skipped += 1
+                continue
+            db.create_inspection_attachment(
+                inspection_id, f["filename"], f["content_type"] or "application/octet-stream",
+                f["body"], caption, self.current_user["id"],
+            )
+        back = f"/inspections/{inspection_id}"
+        if skipped:
+            back += f"?skipped={skipped}"
+        self.redirect(back)
+
+
+class InspectionAttachmentFileHandler(BaseHandler):
+    @require_login
+    def get(self, inspection_id, attachment_id):
+        att = db.get_inspection_attachment_file(int(attachment_id))
+        if not att or att["inspection_id"] != int(inspection_id):
+            raise tornado.web.HTTPError(404)
+        self.set_header("Content-Type", att["content_type"] or "application/octet-stream")
+        if not (att["content_type"] or "").startswith("image/"):
+            self.set_header("Content-Disposition", f'attachment; filename="{att["filename"] or "file"}"')
+        self.write(att["file_data"])
+
+
+class InspectionAttachmentDeleteHandler(BaseHandler):
+    @require_login
+    def post(self, inspection_id, attachment_id):
+        inspection_id = int(inspection_id)
+        att = db.get_inspection_attachment_file(int(attachment_id))
+        if not att or att["inspection_id"] != inspection_id:
+            raise tornado.web.HTTPError(404)
+        db.delete_inspection_attachment(int(attachment_id))
+        self.redirect(f"/inspections/{inspection_id}")
+
+
+class AssetAttachmentsHandler(BaseHandler):
+    @require_login
+    def post(self, asset_id):
+        asset_id = int(asset_id)
+        if not db.get_asset(asset_id):
+            raise tornado.web.HTTPError(404)
+        caption = self.get_body_argument("caption", "")
+        files = self.request.files.get("file", [])
+        skipped = 0
+        for f in files:
+            if len(f["body"]) > MAX_ATTACHMENT_SIZE:
+                skipped += 1
+                continue
+            db.create_asset_attachment(
+                asset_id, f["filename"], f["content_type"] or "application/octet-stream",
+                f["body"], caption, self.current_user["id"],
+            )
+        back = f"/assets/{asset_id}"
+        if skipped:
+            back += f"?skipped={skipped}"
+        self.redirect(back)
+
+
+class AssetAttachmentFileHandler(BaseHandler):
+    @require_login
+    def get(self, asset_id, attachment_id):
+        att = db.get_asset_attachment_file(int(attachment_id))
+        if not att or att["asset_id"] != int(asset_id):
+            raise tornado.web.HTTPError(404)
+        self.set_header("Content-Type", att["content_type"] or "application/octet-stream")
+        if not (att["content_type"] or "").startswith("image/"):
+            self.set_header("Content-Disposition", f'attachment; filename="{att["filename"] or "file"}"')
+        self.write(att["file_data"])
+
+
+class AssetAttachmentDeleteHandler(BaseHandler):
+    @require_login
+    def post(self, asset_id, attachment_id):
+        asset_id = int(asset_id)
+        att = db.get_asset_attachment_file(int(attachment_id))
+        if not att or att["asset_id"] != asset_id:
+            raise tornado.web.HTTPError(404)
+        db.delete_asset_attachment(int(attachment_id))
+        self.redirect(f"/assets/{asset_id}")
 
 
 class ServiceCallPdfHandler(BaseHandler):
@@ -988,9 +1091,11 @@ class InspectionDetailHandler(BaseHandler):
         if prev:
             prev_data = json.loads(prev["form_data"] or "{}")
             changed_fields, tables_changed = build_inspection_diff(cfg, data, prev_data)
+        attachments = db.list_inspection_attachments(inspection["id"])
         self.render_tpl("inspection_detail.html", inspection=inspection, cfg=cfg,
                          data=data, closing=CLOSING_SECTION, prev=prev,
                          changed_fields=changed_fields, tables_changed=tables_changed,
+                         attachments=attachments,
                          new_asset=self.get_argument("new_asset", ""))
 
 
@@ -1097,6 +1202,9 @@ def make_app():
         (r"/assets/(\d+)", AssetDetailHandler),
         (r"/assets/(\d+)/edit", AssetEditHandler),
         (r"/assets/(\d+)/delete", AssetDeleteHandler),
+        (r"/assets/(\d+)/attachments", AssetAttachmentsHandler),
+        (r"/assets/(\d+)/attachments/(\d+)/file", AssetAttachmentFileHandler),
+        (r"/assets/(\d+)/attachments/(\d+)/delete", AssetAttachmentDeleteHandler),
         (r"/schedules/set", ScheduleSetHandler),
         (r"/service-calls", ServiceCallsHandler),
         (r"/service-calls/(\d+)", ServiceCallDetailHandler),
@@ -1118,6 +1226,9 @@ def make_app():
         (r"/inspections/(\d+)/edit", InspectionEditHandler),
         (r"/inspections/(\d+)/delete", InspectionDeleteHandler),
         (r"/inspections/(\d+)/pdf", InspectionPdfHandler),
+        (r"/inspections/(\d+)/attachments", InspectionAttachmentsHandler),
+        (r"/inspections/(\d+)/attachments/(\d+)/file", InspectionAttachmentFileHandler),
+        (r"/inspections/(\d+)/attachments/(\d+)/delete", InspectionAttachmentDeleteHandler),
         (r"/search", SearchHandler),
         (r"/admin/backup", BackupHandler),
     ], **settings)
