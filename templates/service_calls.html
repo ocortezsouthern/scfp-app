@@ -8,7 +8,7 @@
 
 <div id="new-call" class="collapsible panel">
   <h2>Schedule a Service Call / Emergency Call</h2>
-  <p class="muted" style="margin-top:-6px">Pick the site if it's already on file. If it's a new location, either attach it to an existing customer or type a brand-new customer name — we'll create the client/site records for you automatically.</p>
+  <p class="muted" style="margin-top:-6px">Pick the site if it's already on file. If it's a new customer or a new location, click "+ New customer or site" below to add it.</p>
   <form method="post" action="/service-calls" class="form-grid">
     <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
     <input type="hidden" name="back" value="/service-calls">
@@ -21,25 +21,32 @@
     </label>
     <label>Site (if already in the system)
       <select name="site_id">
-        <option value="">— Not on file yet (fill in below) —</option>
+        <option value="">— Not on file yet —</option>
         {% for s in sites %}
         <option value="{{ s['id'] }}">{{ s['client_name'] }} — {{ s['name'] }}{% if s['city'] %} ({{ s['city'] }}){% endif %}</option>
         {% endfor %}
       </select>
     </label>
-    <label>Existing Customer <span class="muted">(pick if this is a new location for a current customer)</span>
-      <select name="existing_client_id">
-        <option value="">— Brand-new customer (type name below) —</option>
-        {% for c in clients %}
-        <option value="{{ c['id'] }}">{{ c['name'] }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <label>New Site / Location Name <span class="muted">(only if the site above isn't on file yet)</span><input type="text" name="new_site_name" placeholder="e.g. Store #12 or Main Location"></label>
-    <label>Customer Name <span class="muted">(required if this is a brand-new customer)</span><input type="text" name="customer_name"></label>
-    <label>Location / Address<input type="text" name="location_address"></label>
-    <label>Contact Name<input type="text" name="contact_name"></label>
-    <label>Contact Phone<input type="text" name="contact_phone"></label>
+    <div class="span2">
+      <button type="button" class="btn small" onclick="document.getElementById('sc-new-customer').classList.toggle('open')">+ New customer or site</button>
+    </div>
+    <div id="sc-new-customer" class="collapsible span2">
+      <div class="form-grid" style="margin-top:10px">
+        <label>Existing Customer <span class="muted">(pick if this is a new location for a current customer)</span>
+          <select name="existing_client_id">
+            <option value="">— Brand-new customer (type name below) —</option>
+            {% for c in clients %}
+            <option value="{{ c['id'] }}">{{ c['name'] }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>New Site / Location Name<input type="text" name="new_site_name" placeholder="e.g. Store #12 or Main Location"></label>
+        <label>Customer Name <span class="muted">(required if this is a brand-new customer)</span><input type="text" name="customer_name"></label>
+        <label>Location / Address<input type="text" name="location_address"></label>
+        <label>Contact Name<input type="text" name="contact_name"></label>
+        <label>Contact Phone<input type="text" name="contact_phone"></label>
+      </div>
+    </div>
     <label>Scheduled Date *<input type="date" name="scheduled_date" value="{{ today }}" required></label>
     <label>Scheduled Time<input type="time" name="scheduled_time"></label>
     <label>Assign To
