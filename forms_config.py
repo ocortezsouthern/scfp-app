@@ -145,7 +145,7 @@ INSPECTION_TYPES = {
     "sprinkler_wet": {
         "label": "Fire Sprinkler Annual Inspection (Wet Pipe)",
         "frequency_months": 12,
-        "asset_scope": "site",
+        "asset_scope": "wet_pipe",
         "sections": [
             {"name": "Wet Systems", "fields": [
                 {"key": "wet_systems", "label": "Wet System Risers", "type": "table", "columns": [
@@ -355,7 +355,7 @@ INSPECTION_TYPES = {
     "fire_alarm": {
         "label": "Fire Alarm Inspection",
         "frequency_months": 12,
-        "asset_scope": "site",
+        "asset_scope": "fire_alarm_panel",
         "sections": [
             {"name": "Pre-Test Notifications", "fields": [
                 {"key": "notifications", "label": "Notifications", "type": "table", "columns": [
@@ -696,6 +696,10 @@ ASSET_FIELD_MAP = {
         "manufacturer": "manufacturer",
         "model": "model_type",
         "serial_number": "shop_serial",
+    },
+    "fire_alarm": {
+        "manufacturer": "panel_manufacturer",
+        "model": "panel_model",
     },
 }
 
