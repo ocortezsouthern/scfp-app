@@ -101,7 +101,7 @@
       </label>
       {% else %}
       <label>Equipment / Asset
-        <select name="asset_id" id="asset-select" onchange="document.getElementById('new-asset-row').style.display = (this.value === '__new__') ? '' : 'none'">
+        <select name="asset_id" id="asset-select" onchange="onAssetSelectChange(this)">
           <option value="">— Site-level (no specific asset) —</option>
           {% for a in assets %}
           <option value="{{ a['id'] }}" {% if asset and asset['id']==a['id'] %}selected{% endif %}>{{ a['label'] }}</option>
@@ -110,6 +110,7 @@
           <option value="__new__" {% if asset_id == '__new__' %}selected{% endif %}>+ Add as new equipment (not on file yet)</option>
           {% endif %}
         </select>
+        {% if asset_field_map %}<span class="muted" style="font-weight:400;">Picking existing equipment fills in its details below automatically.</span>{% endif %}
       </label>
       {% endif %}
       <label>Inspection Date *
@@ -129,7 +130,27 @@
   </div>
 
   {% for section in cfg.sections %}
+  {% set section_keys = section.fields | map(attribute='key') | list %}
+  {% set section_has_data = section_keys | select('in', data.keys() | list) | list | length > 0 %}
   <div class="panel">
+    {% if section.collapsible %}
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+      <h2 style="margin:0;">{{ section.name }}</h2>
+      <button type="button" class="btn small" onclick="document.getElementById('section-{{ loop.index }}').classList.toggle('open')">{{ section.collapsible_label or ('+ ' + section.name) }}</button>
+    </div>
+    {% if section.collapsible_hint %}<p class="muted" style="margin:4px 0 0;">{{ section.collapsible_hint }}</p>{% endif %}
+    <div id="section-{{ loop.index }}" class="collapsible {{ 'open' if section_has_data else '' }}"
+         {% if section.auto_reveal %}data-auto-reveal-field="{{ section.auto_reveal.field }}" data-auto-reveal-value="{{ section.auto_reveal.equals }}"{% endif %}>
+      <div class="form-grid" style="margin-top:10px;">
+        {% for f in section.fields %}
+          {% if f.type != 'table' %}{{ simple_field(f, data) }}{% endif %}
+        {% endfor %}
+      </div>
+      {% for f in section.fields %}
+        {% if f.type == 'table' %}{{ table_field(f, data) }}{% endif %}
+      {% endfor %}
+    </div>
+    {% else %}
     <h2>{{ section.name }}</h2>
     <div class="form-grid">
       {% for f in section.fields %}
@@ -139,6 +160,7 @@
     {% for f in section.fields %}
       {% if f.type == 'table' %}{{ table_field(f, data) }}{% endif %}
     {% endfor %}
+    {% endif %}
   </div>
   {% endfor %}
 
@@ -153,5 +175,38 @@
     <button type="submit" class="btn primary large">{% if edit_mode %}Save Changes{% else %}Save Inspection{% endif %}</button>
   </div>
 </form>
+
+{% if not edit_mode %}
+<script>
+  var ASSETS_BY_ID = {};
+  ({{ (assets_for_js or [])|tojson }}).forEach(function (a) { ASSETS_BY_ID[a.id] = a; });
+  var ASSET_FIELD_MAP = {{ (asset_field_map or {})|tojson }};
+
+  function onAssetSelectChange(sel) {
+    var newRow = document.getElementById('new-asset-row');
+    if (newRow) { newRow.style.display = (sel.value === '__new__') ? '' : 'none'; }
+
+    var asset = ASSETS_BY_ID[sel.value];
+    if (!asset) { return; }
+    Object.keys(ASSET_FIELD_MAP).forEach(function (assetCol) {
+      var formKey = ASSET_FIELD_MAP[assetCol];
+      var val = asset[assetCol];
+      if (!val) { return; }
+      var field = document.querySelector('[name="' + formKey + '"]');
+      if (field) { field.value = val; }
+    });
+  }
+
+  document.querySelectorAll('.collapsible[data-auto-reveal-field]').forEach(function (panel) {
+    var fieldName = panel.getAttribute('data-auto-reveal-field');
+    var wantValue = panel.getAttribute('data-auto-reveal-value');
+    var field = document.querySelector('[name="' + fieldName + '"]');
+    if (!field) { return; }
+    field.addEventListener('change', function () {
+      if (field.value === wantValue) { panel.classList.add('open'); }
+    });
+  });
+</script>
+{% endif %}
 {% endif %}
 {% endblock %}
