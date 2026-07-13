@@ -22,6 +22,7 @@
         <a href="/inspections">Inspections</a>
         <a href="/service-calls">Service Calls</a>
         <a href="/repairs">Repairs</a>
+        <a href="/expenses">Expenses</a>
         <a href="/users">Users</a>
       </nav>
       <form class="search-form" action="/search" method="get">
@@ -31,7 +32,7 @@
         {% if current_user['role'] == 'admin' %}
         <a href="/admin/backup" title="Download a full backup of the database">Download Backup</a>
         {% endif %}
-        <span>{{ current_user['name'] }}</span>
+        <a href="/profile">{{ current_user['name'] }}</a>
         <a href="/logout">Log out</a>
       </div>
     </div>

@@ -88,6 +88,64 @@
 </div>
 
 <section class="panel">
+  <h2>Service Calls</h2>
+  <p class="muted" style="margin-top:-6px">Every tech's calls in one place — current work still open, and everything wrapped up.</p>
+  <div class="tab-bar">
+    <button type="button" class="tab-btn active" data-tab-group="dash-calls" data-tab-target="current"
+            onclick="switchTab('dash-calls', 'current')">Current ({{ current_calls|length }})</button>
+    <button type="button" class="tab-btn" data-tab-group="dash-calls" data-tab-target="completed"
+            onclick="switchTab('dash-calls', 'completed')">Completed ({{ completed_calls|length }})</button>
+  </div>
+  <div class="tab-panel active" data-tab-group="dash-calls" data-tab-name="current">
+    {% if current_calls %}
+    <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Date</th><th>WO / PO #</th><th>Type</th><th>Customer / Site</th><th>Assigned</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      {% for c in current_calls %}
+        <tr>
+          <td class="{{ 'overdue' if c['scheduled_date'] and c['scheduled_date'] < today else '' }}">{{ c['scheduled_date'] or '—' }}{% if c['scheduled_time'] %} {{ c['scheduled_time'] }}{% endif %}</td>
+          <td>{{ c['work_order_number'] or '—' }}</td>
+          <td><span class="badge {{ 'badge-fail' if c['call_type']=='Emergency Call' else 'badge-info' }}">{{ c['call_type'] }}</span></td>
+          <td>{% if c['site_id'] %}<a href="/sites/{{ c['site_id'] }}">{{ c['client_name'] }} — {{ c['site_name'] }}</a>{% else %}{{ c['customer_name'] or '—' }}{% endif %}</td>
+          <td>{{ c['assigned_to_name'] or '—' }}</td>
+          <td><span class="badge {{ 'badge-warn' if c['status'] in ['In Progress', 'Completed - Repairs Required', 'Completed - Return Trip Required'] else '' }}">{{ c['status'] }}</span></td>
+          <td><a href="/service-calls/{{ c['id'] }}">View</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="muted">No open or in-progress calls right now.</p>
+    {% endif %}
+  </div>
+  <div class="tab-panel" data-tab-group="dash-calls" data-tab-name="completed">
+    {% if completed_calls %}
+    <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Date</th><th>WO / PO #</th><th>Type</th><th>Customer / Site</th><th>Assigned</th><th></th></tr></thead>
+      <tbody>
+      {% for c in completed_calls %}
+        <tr>
+          <td>{{ c['scheduled_date'] or '—' }}</td>
+          <td>{{ c['work_order_number'] or '—' }}</td>
+          <td><span class="badge badge-info">{{ c['call_type'] }}</span></td>
+          <td>{% if c['site_id'] %}<a href="/sites/{{ c['site_id'] }}">{{ c['client_name'] }} — {{ c['site_name'] }}</a>{% else %}{{ c['customer_name'] or '—' }}{% endif %}</td>
+          <td>{{ c['assigned_to_name'] or '—' }}</td>
+          <td><a href="/service-calls/{{ c['id'] }}">View</a> · <a href="/service-calls/{{ c['id'] }}/pdf" target="_blank">PDF</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="muted">No completed calls yet.</p>
+    {% endif %}
+  </div>
+</section>
+
+<section class="panel">
   <h2>Needs Follow-Up</h2>
   <p class="muted" style="margin-top:-6px">Calls that were closed out but still need material/repairs finished or a return trip made. Stays here until the status is updated again.</p>
   {% if followup_calls %}

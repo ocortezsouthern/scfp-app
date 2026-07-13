@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}My Profile — SCFP Inspection Tracker{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>My Profile</h1>
+</div>
+
+{% if error %}<div class="notice notice-error">{{ error }}</div>{% endif %}
+{% if profile_saved %}<div class="notice">Saved.</div>{% endif %}
+
+<div class="two-col">
+  <section class="panel">
+    <h2>Contact Info</h2>
+    <form method="post" action="/profile/edit" class="form-grid">
+      <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+      <label>Name *<input type="text" name="name" value="{{ profile_user['name'] }}" required></label>
+      <label>Email *<input type="email" name="email" value="{{ profile_user['email'] }}" required></label>
+      <label>Phone<input type="text" name="phone" value="{{ profile_user['phone'] or '' }}"></label>
+      <label>Certification #<input type="text" name="cert_number" value="{{ profile_user['cert_number'] or '' }}"></label>
+      <div class="span2"><button type="submit" class="btn primary">Save Changes</button></div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>Change Password</h2>
+    <form method="post" action="/profile/change-password" class="form-grid">
+      <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+      <label>Current Password *<input type="password" name="current_password" required></label>
+      <label>New Password * <span class="muted">(6+ characters)</span><input type="password" name="new_password" required minlength="6"></label>
+      <div class="span2"><button type="submit" class="btn primary">Change Password</button></div>
+    </form>
+  </section>
+</div>
+
+<section class="panel">
+  <h2>My Service Calls</h2>
+  <div class="tab-bar">
+    <button type="button" class="tab-btn active" data-tab-group="my-calls" data-tab-target="current"
+            onclick="switchTab('my-calls', 'current')">Current ({{ my_current_calls|length }})</button>
+    <button type="button" class="tab-btn" data-tab-group="my-calls" data-tab-target="completed"
+            onclick="switchTab('my-calls', 'completed')">Completed ({{ my_completed_calls|length }})</button>
+  </div>
+  <div class="tab-panel active" data-tab-group="my-calls" data-tab-name="current">
+    {% if my_current_calls %}
+    <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Date</th><th>WO / PO #</th><th>Type</th><th>Customer / Site</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      {% for c in my_current_calls %}
+        <tr>
+          <td>{{ c['scheduled_date'] or '—' }}</td>
+          <td>{{ c['work_order_number'] or '—' }}</td>
+          <td><span class="badge {{ 'badge-fail' if c['call_type']=='Emergency Call' else 'badge-info' }}">{{ c['call_type'] }}</span></td>
+          <td>{% if c['site_id'] %}<a href="/sites/{{ c['site_id'] }}">{{ c['client_name'] }} — {{ c['site_name'] }}</a>{% else %}{{ c['customer_name'] or '—' }}{% endif %}</td>
+          <td><span class="badge {{ 'badge-warn' if c['status'] in ['In Progress', 'Completed - Repairs Required', 'Completed - Return Trip Required'] else '' }}">{{ c['status'] }}</span></td>
+          <td><a href="/service-calls/{{ c['id'] }}">View</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="muted">No current calls assigned to you.</p>
+    {% endif %}
+  </div>
+  <div class="tab-panel" data-tab-group="my-calls" data-tab-name="completed">
+    {% if my_completed_calls %}
+    <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Date</th><th>WO / PO #</th><th>Type</th><th>Customer / Site</th><th></th></tr></thead>
+      <tbody>
+      {% for c in my_completed_calls %}
+        <tr>
+          <td>{{ c['scheduled_date'] or '—' }}</td>
+          <td>{{ c['work_order_number'] or '—' }}</td>
+          <td><span class="badge badge-info">{{ c['call_type'] }}</span></td>
+          <td>{% if c['site_id'] %}<a href="/sites/{{ c['site_id'] }}">{{ c['client_name'] }} — {{ c['site_name'] }}</a>{% else %}{{ c['customer_name'] or '—' }}{% endif %}</td>
+          <td><a href="/service-calls/{{ c['id'] }}">View</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="muted">No completed calls yet.</p>
+    {% endif %}
+  </div>
+</section>
+
+<section class="panel">
+  <h2>My Inspections</h2>
+  {% if my_inspections %}
+  <div class="table-scroll">
+  <table class="data-table">
+    <thead><tr><th>Date</th><th>Client</th><th>Site</th><th>Type</th><th>Result</th><th></th></tr></thead>
+    <tbody>
+    {% for i in my_inspections %}
+      <tr>
+        <td>{{ i['inspection_date'] }}</td>
+        <td>{{ i['client_name'] }}</td>
+        <td><a href="/sites/{{ i['site_id'] }}">{{ i['site_name'] }}</a></td>
+        <td>{{ type_cfg.get(i['inspection_type'], {}).get('label', i['inspection_type']) }}</td>
+        <td><span class="badge {{ 'badge-fail' if i['overall_result']=='Fail' else ('badge-pass' if i['overall_result']=='Pass' else '') }}">{{ i['overall_result'] or '—' }}</span></td>
+        <td><a href="/inspections/{{ i['id'] }}">View</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">No inspections logged by you yet.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>My Expenses</h2>
+  <p class="muted" style="margin-top:-6px">Total logged: <strong>${{ "%.2f"|format(my_expense_total) }}</strong> · <a href="/expenses">View / add expenses</a></p>
+</section>
+{% endblock %}
