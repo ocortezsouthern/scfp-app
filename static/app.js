@@ -135,4 +135,17 @@
       }
     });
   });
+
+  // Simple tab switcher used by dashboard/expenses/profile pages:
+  // buttons carry data-tab-group + data-tab-target, panels carry
+  // data-tab-group + data-tab-name.
+  window.switchTab = function (group, name) {
+    document.querySelectorAll('[data-tab-group="' + group + '"]').forEach(function (el) {
+      if (el.hasAttribute("data-tab-target")) {
+        el.classList.toggle("active", el.getAttribute("data-tab-target") === name);
+      } else if (el.hasAttribute("data-tab-name")) {
+        el.classList.toggle("active", el.getAttribute("data-tab-name") === name);
+      }
+    });
+  };
 })();

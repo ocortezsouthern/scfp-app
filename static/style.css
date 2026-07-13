@@ -46,6 +46,14 @@ main.auth-page { max-width: 420px; padding-top: 80px; }
 .collapsible { display: none; }
 .collapsible.open { display: block; }
 
+.tab-bar { display: flex; gap: 8px; margin-bottom: 14px; }
+.tab-btn { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 7px 16px; font-size: 13.5px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.tab-btn.active { background: var(--navy); border-color: var(--navy); color: white; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+.receipt-thumb { display: block; width: 100%; max-width: 90px; border-radius: 4px; }
+
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
 
@@ -109,6 +117,7 @@ textarea { min-height: 60px; resize: vertical; }
 
 .alert { background: #fbe4e1; color: var(--accent); padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; font-size: 13.5px; }
 .notice { background: #eaf1fb; color: #1c3560; padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; font-size: 13.5px; border: 1px solid #c6d8f0; }
+.notice-error { background: #fdf1ef; color: var(--accent); border-color: #f3c9c2; }
 .btn.danger { background: white; color: var(--accent); border-color: var(--accent); }
 .btn.danger:hover { background: var(--accent); color: white; }
 
