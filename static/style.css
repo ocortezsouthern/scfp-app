@@ -141,6 +141,16 @@ textarea { min-height: 60px; resize: vertical; }
 }
 .checkbox-chip input { width: auto; padding: 0; }
 
+.yn-toggle { display: flex !important; flex-direction: row !important; gap: 6px; margin-top: 2px; }
+.yn-btn {
+  flex: 1; border: 1px solid var(--border); border-radius: 6px; background: white;
+  color: var(--text); font-size: 12.5px; font-weight: 600; padding: 7px 10px; cursor: pointer;
+}
+.yn-btn:hover { border-color: var(--navy-light); }
+.yn-btn.active[data-value="Yes"] { background: #e3f5e9; border-color: #1e7d3e; color: #1e7d3e; }
+.yn-btn.active[data-value="No"] { background: #fbe4e1; border-color: var(--accent); color: var(--accent); }
+.yn-btn.active[data-value="N/A"] { background: var(--bg); border-color: var(--muted); color: var(--text); }
+
 .activity-timeline { list-style: none; margin: 0; padding: 0; }
 .activity-item { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .activity-item:last-child { border-bottom: none; }
