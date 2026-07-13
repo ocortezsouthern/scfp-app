@@ -36,6 +36,36 @@
 </div>
 
 <div class="panel">
+  <h2>✅ On-Site Verification</h2>
+  <p class="muted" style="margin-top:-6px">Recorded by the technician on-site — this also fills in the printed work order instead of leaving it blank.</p>
+  <form method="post" action="/service-calls/{{ call['id'] }}/onsite" class="form-grid">
+    <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+    <label>Check-In Time
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input type="time" name="check_in_time" id="check_in_time" value="{{ call['check_in_time'] or '' }}" style="flex:1;">
+        <button type="button" class="btn small" onclick="scfpSetNow('check_in_time')">Now</button>
+      </div>
+    </label>
+    <label>Check-Out Time
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input type="time" name="check_out_time" id="check_out_time" value="{{ call['check_out_time'] or '' }}" style="flex:1;">
+        <button type="button" class="btn small" onclick="scfpSetNow('check_out_time')">Now</button>
+      </div>
+    </label>
+    <label class="span2">Description of Work Completed<textarea name="work_performed" placeholder="Include all work done and materials used">{{ call['work_performed'] or '' }}</textarea></label>
+    <div class="span2"><button type="submit" class="btn primary">Save</button></div>
+  </form>
+</div>
+<script>
+  function scfpSetNow(fieldId) {
+    var d = new Date();
+    var hh = String(d.getHours()).padStart(2, '0');
+    var mm = String(d.getMinutes()).padStart(2, '0');
+    document.getElementById(fieldId).value = hh + ':' + mm;
+  }
+</script>
+
+<div class="panel">
   <h2>Description</h2>
   <p>{{ call['description'] or '—' }}</p>
   {% if call['notes'] %}
