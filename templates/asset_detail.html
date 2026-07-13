@@ -81,7 +81,7 @@
   <h2>Inspection History</h2>
   <div class="table-scroll">
 <table class="data-table">
-    <thead><tr><th>Date</th><th>Type</th><th>Inspector</th><th>Result</th><th></th></tr></thead>
+    <thead><tr><th>Date</th><th>Type</th><th>Inspector</th><th>Result</th><th>Vs. Previous</th><th></th></tr></thead>
     <tbody>
     {% for i in inspections %}
       <tr>
@@ -89,10 +89,18 @@
         <td>{{ type_cfg.get(i['inspection_type'], {}).get('label', i['inspection_type']) }}</td>
         <td>{{ i['inspector_name'] or '—' }}</td>
         <td><span class="badge {{ 'badge-fail' if i['overall_result']=='Fail' else ('badge-pass' if i['overall_result']=='Pass' else '') }}">{{ i['overall_result'] or '—' }}</span></td>
+        <td>
+          {% if i.trend == 'first' %}<span class="muted">First on record</span>
+          {% elif i.trend == 'same' %}<span class="muted">No change</span>
+          {% elif i.trend == 'improved' %}<span class="trend-improved">▲ Improved (was Fail)</span>
+          {% elif i.trend == 'declined' %}<span class="trend-declined">▼ Declined (was Pass)</span>
+          {% else %}<span class="muted">Changed</span>
+          {% endif %}
+        </td>
         <td><a href="/inspections/{{ i['id'] }}">View</a> · <a href="/inspections/{{ i['id'] }}/pdf" target="_blank">PDF</a></td>
       </tr>
     {% else %}
-      <tr><td colspan="5" class="muted">No inspections logged for this asset yet.</td></tr>
+      <tr><td colspan="6" class="muted">No inspections logged for this asset yet.</td></tr>
     {% endfor %}
     </tbody>
   </table>

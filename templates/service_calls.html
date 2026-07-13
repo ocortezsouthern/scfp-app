@@ -59,6 +59,17 @@
     </label>
     <label>Work Order / PO # <span class="muted">(auto-suggested — edit or paste a customer PO #)</span><input type="text" name="work_order_number" value="{{ suggested_wo }}"></label>
     <label class="span2">What's needed / reason for the call *<textarea name="description" required placeholder="e.g. Pull station activated, no fire — needs reset and inspection"></textarea></label>
+    <div class="span2">
+      <button type="button" class="btn small" onclick="document.getElementById('sc-inspections').classList.toggle('open')">+ Schedule inspection(s) for this call</button>
+    </div>
+    <div id="sc-inspections" class="collapsible span2">
+      <p class="muted" style="margin-top:6px">Check every inspection this visit needs to cover (wet system, fire pump, backflow, fire alarm, etc.) — right after you add this call you'll fill out each one in turn. Only works if a site is selected or created above.</p>
+      <div class="checkbox-grid">
+        {% for key, label in all_types %}
+        <label class="checkbox-chip"><input type="checkbox" name="inspection_types" value="{{ key }}"> {{ label }}</label>
+        {% endfor %}
+      </div>
+    </div>
     <div class="span2"><button type="submit" class="btn primary">Add to Tracker</button></div>
   </form>
 </div>

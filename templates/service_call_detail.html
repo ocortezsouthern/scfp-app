@@ -88,6 +88,103 @@
 </div>
 
 <div class="panel">
+  <h2>Inspections for This Call</h2>
+  {% if linked_inspections %}
+  <div class="table-scroll">
+<table class="data-table">
+    <thead><tr><th>Date</th><th>Type</th><th>Asset</th><th>Result</th><th></th></tr></thead>
+    <tbody>
+    {% for i in linked_inspections %}
+      <tr>
+        <td>{{ i['inspection_date'] }}</td>
+        <td>{{ type_cfg.get(i['inspection_type'], {}).get('label', i['inspection_type']) }}</td>
+        <td>{{ i['asset_label'] or '—' }}</td>
+        <td><span class="badge {{ 'badge-fail' if i['overall_result']=='Fail' else ('badge-pass' if i['overall_result']=='Pass' else '') }}">{{ i['overall_result'] or '—' }}</span></td>
+        <td><a href="/inspections/{{ i['id'] }}">View</a> · <a href="/inspections/{{ i['id'] }}/pdf" target="_blank">PDF</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+  {% else %}
+  <p class="muted">No inspections logged for this call yet.</p>
+  {% endif %}
+  {% if call['site_id'] %}
+  <form method="get" action="/inspections/new" class="form-grid" style="margin-top:12px">
+    <input type="hidden" name="site_id" value="{{ call['site_id'] }}">
+    <input type="hidden" name="service_call_id" value="{{ call['id'] }}">
+    <label>Inspection Type
+      <select name="type" required>
+        <option value="">Select type…</option>
+        {% for key, label in all_types %}
+        <option value="{{ key }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Equipment (optional)
+      <select name="asset_id">
+        <option value="">— Site-level (no specific asset) —</option>
+        {% for a in site_assets %}
+        <option value="{{ a['id'] }}">{{ a['label'] }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <div><button type="submit" class="btn">+ Start an Inspection</button></div>
+  </form>
+  {% else %}
+  <p class="muted">This call isn't linked to a site on file, so inspections can't be logged against it.</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2>Repairs</h2>
+  {% if repairs %}
+  <div class="table-scroll">
+<table class="data-table">
+    <thead><tr><th>Reported</th><th>Description</th><th>Status</th><th>Completed</th><th></th></tr></thead>
+    <tbody>
+    {% for r in repairs %}
+      <tr>
+        <td>{{ r['reported_date'] }}</td>
+        <td>{{ r['description'] }}</td>
+        <td><span class="badge {{ 'badge-pass' if r['status']=='Completed' else 'badge-warn' }}">{{ r['status'] }}</span></td>
+        <td>{{ r['completed_date'] or '—' }}{% if r['completed_by_name'] %} ({{ r['completed_by_name'] }}){% endif %}</td>
+        <td>
+          {% if r['status'] == 'Open' %}
+          <form method="post" action="/repairs/{{ r['id'] }}/complete" style="display:inline">
+            <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+            <input type="hidden" name="back" value="/service-calls/{{ call['id'] }}">
+            <button type="submit" class="btn small">Mark Completed</button>
+          </form>
+          {% else %}
+          <form method="post" action="/repairs/{{ r['id'] }}/reopen" style="display:inline">
+            <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+            <input type="hidden" name="back" value="/service-calls/{{ call['id'] }}">
+            <button type="submit" class="btn small">Reopen</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+  {% else %}
+  <p class="muted">No repairs logged for this call.</p>
+  {% endif %}
+  {% if call['site_id'] %}
+  <form method="post" action="/repairs/new" class="form-grid" style="margin-top:12px">
+    <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+    <input type="hidden" name="site_id" value="{{ call['site_id'] }}">
+    <input type="hidden" name="service_call_id" value="{{ call['id'] }}">
+    <input type="hidden" name="back" value="/service-calls/{{ call['id'] }}">
+    <label class="span2">Describe the repair needed<input type="text" name="description" required placeholder="e.g. Replace corroded check valve on Backflow #2"></label>
+    <div class="span2"><button type="submit" class="btn">+ Log a Repair Needed</button></div>
+  </form>
+  {% endif %}
+</div>
+
+<div class="panel">
   <h2>Update Status</h2>
   <div class="btn-group">
     {% for st in call_statuses %}

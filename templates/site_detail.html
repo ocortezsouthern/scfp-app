@@ -186,4 +186,76 @@
   </table>
 </div>
 </section>
+
+<section class="panel">
+  <h2>Open Repairs</h2>
+  {% if open_repairs %}
+  <div class="table-scroll">
+<table class="data-table">
+    <thead><tr><th>Reported</th><th>Description</th><th>Asset</th><th></th></tr></thead>
+    <tbody>
+    {% for r in open_repairs %}
+      <tr>
+        <td>{{ r['reported_date'] }}</td>
+        <td>{{ r['description'] }}{% if r['service_call_id'] %}<br><span class="muted">from <a href="/service-calls/{{ r['service_call_id'] }}">Call #{{ r['service_call_id'] }}</a></span>{% endif %}</td>
+        <td>{{ r['asset_label'] or '—' }}</td>
+        <td>
+          <form method="post" action="/repairs/{{ r['id'] }}/complete" style="display:inline">
+            <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+            <input type="hidden" name="back" value="/sites/{{ site['id'] }}">
+            <button type="submit" class="btn small">Mark Completed</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+  {% else %}
+  <p class="muted">No open repairs at this site.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Site Activity Log</h2>
+  <p class="muted" style="margin-top:-6px">Everything recorded at this site — inspections, service/emergency calls, and repairs — newest first.</p>
+  {% if activity %}
+  <ul class="activity-timeline">
+    {% for e in activity %}
+    <li class="activity-item">
+      {% if e.kind == 'inspection' %}
+      <div class="activity-icon inspection">I</div>
+      <div class="activity-body">
+        <div class="activity-date">{{ e.date }}</div>
+        <div class="activity-title"><a href="/inspections/{{ e.id }}">{{ type_cfg.get(e.inspection_type, {}).get('label', e.inspection_type) }}</a>
+          <span class="badge {{ 'badge-fail' if e.overall_result=='Fail' else ('badge-pass' if e.overall_result=='Pass' else '') }}">{{ e.overall_result or '—' }}</span>
+        </div>
+        <div class="activity-meta">Inspection{% if e.asset_label %} · {{ e.asset_label }}{% endif %}{% if e.who %} · {{ e.who }}{% endif %}</div>
+      </div>
+      {% elif e.kind == 'service_call' %}
+      <div class="activity-icon service_call">C</div>
+      <div class="activity-body">
+        <div class="activity-date">{{ e.date }}</div>
+        <div class="activity-title"><a href="/service-calls/{{ e.id }}">{{ e.call_type }}</a>
+          <span class="badge {{ 'badge-pass' if e.status=='Completed' else ('badge-warn' if e.status in ['In Progress', 'Completed - Repairs Required', 'Completed - Return Trip Required'] else '') }}">{{ e.status }}</span>
+        </div>
+        <div class="activity-meta">{{ e.description[:80] if e.description else '—' }}{% if e.who %} · {{ e.who }}{% endif %}</div>
+      </div>
+      {% elif e.kind == 'repair' %}
+      <div class="activity-icon repair">R</div>
+      <div class="activity-body">
+        <div class="activity-date">{{ e.date }}</div>
+        <div class="activity-title">Repair {% if e.status == 'Completed' %}Completed{% else %}Needed{% endif %}
+          <span class="badge {{ 'badge-pass' if e.status=='Completed' else 'badge-warn' }}">{{ e.status }}</span>
+        </div>
+        <div class="activity-meta">{{ e.description }}{% if e.asset_label %} · {{ e.asset_label }}{% endif %}</div>
+      </div>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">No activity recorded for this site yet.</p>
+  {% endif %}
+</section>
 {% endblock %}

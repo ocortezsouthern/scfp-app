@@ -72,11 +72,18 @@
 <div class="notice">Manufacturer, model, serial #, size, and location were pre-filled from this equipment's saved record — double-check them and edit any that changed.</div>
 {% endif %}
 
+{% if not edit_mode and service_call_id %}
+<div class="notice">Scheduled from <a href="/service-calls/{{ service_call_id }}">Service Call #{{ service_call_id }}</a>.
+  {% if remaining %}Submitting this will take you to the next requested inspection.{% else %}Submitting this will take you back to the work order.{% endif %}</div>
+{% endif %}
+
 <form method="post" action="{% if edit_mode %}/inspections/{{ inspection['id'] }}/edit{% else %}/inspections/new{% endif %}" id="inspection-form">
   <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
   {% if not edit_mode %}
   <input type="hidden" name="inspection_type" value="{{ inspection_type }}">
   <input type="hidden" name="site_id" value="{{ site_id }}">
+  {% if service_call_id %}<input type="hidden" name="service_call_id" value="{{ service_call_id }}">{% endif %}
+  {% if remaining %}<input type="hidden" name="remaining" value="{{ remaining }}">{% endif %}
   {% endif %}
 
   <div class="panel">

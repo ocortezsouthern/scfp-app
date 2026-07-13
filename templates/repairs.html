@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Repairs — SCFP Inspection Tracker{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Repair Log</h1>
+</div>
+
+<form method="get" action="/repairs" class="inline-search">
+  <select name="status">
+    <option value="Open" {% if selected_status == 'Open' %}selected{% endif %}>Open</option>
+    <option value="Completed" {% if selected_status == 'Completed' %}selected{% endif %}>Completed</option>
+    <option value="" {% if selected_status == '' %}selected{% endif %}>All</option>
+  </select>
+  <button class="btn" type="submit">Filter</button>
+</form>
+
+<div class="table-scroll">
+<table class="data-table">
+  <thead><tr><th>Reported</th><th>Site</th><th>Description</th><th>Asset</th><th>Status</th><th>Completed</th><th></th></tr></thead>
+  <tbody>
+  {% for r in repairs %}
+    <tr>
+      <td>{{ r['reported_date'] }}</td>
+      <td><a href="/sites/{{ r['site_id'] }}">{{ r['client_name'] }} — {{ r['site_name'] }}</a></td>
+      <td>{{ r['description'] }}
+        {% if r['service_call_id'] %}<br><span class="muted">from <a href="/service-calls/{{ r['service_call_id'] }}">Call #{{ r['service_call_id'] }}</a></span>{% endif %}
+      </td>
+      <td>{{ r['asset_label'] or '—' }}</td>
+      <td><span class="badge {{ 'badge-pass' if r['status']=='Completed' else 'badge-warn' }}">{{ r['status'] }}</span></td>
+      <td>{{ r['completed_date'] or '—' }}{% if r['completed_by_name'] %} ({{ r['completed_by_name'] }}){% endif %}</td>
+      <td>
+        {% if r['status'] == 'Open' %}
+        <form method="post" action="/repairs/{{ r['id'] }}/complete" style="display:inline">
+          <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+          <input type="hidden" name="back" value="/repairs?status={{ selected_status }}">
+          <button type="submit" class="btn small">Mark Completed</button>
+        </form>
+        {% else %}
+        <form method="post" action="/repairs/{{ r['id'] }}/reopen" style="display:inline">
+          <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+          <input type="hidden" name="back" value="/repairs?status={{ selected_status }}">
+          <button type="submit" class="btn small">Reopen</button>
+        </form>
+        {% endif %}
+        {% if current_user['role'] == 'admin' %}
+        <form method="post" action="/repairs/{{ r['id'] }}/delete" style="display:inline" onsubmit="return confirm('Delete this repair entry?');">
+          <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+          <input type="hidden" name="back" value="/repairs?status={{ selected_status }}">
+          <button type="submit" class="btn danger small">Delete</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="7" class="muted">No repairs logged.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

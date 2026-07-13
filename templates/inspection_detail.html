@@ -39,6 +39,38 @@
   </table>
 </div>
 
+<div class="panel">
+  <h2>Comparison to Previous Inspection</h2>
+  {% if prev %}
+  <table class="kv-table">
+    <tr><th>Previous Inspection</th><td><a href="/inspections/{{ prev['id'] }}">{{ prev['inspection_date'] }}</a>
+      — <span class="badge {{ 'badge-fail' if prev['overall_result']=='Fail' else ('badge-pass' if prev['overall_result']=='Pass' else '') }}">{{ prev['overall_result'] or '—' }}</span></td></tr>
+    <tr><th>This Inspection</th><td>{{ inspection['inspection_date'] }}
+      — <span class="badge {{ 'badge-fail' if inspection['overall_result']=='Fail' else ('badge-pass' if inspection['overall_result']=='Pass' else '') }}">{{ inspection['overall_result'] or '—' }}</span></td></tr>
+  </table>
+  {% if changed_fields or tables_changed %}
+  <h3 class="table-title">What Changed</h3>
+  <div class="table-scroll">
+  <table class="data-table diff-table">
+    <thead><tr><th>Field</th><th>Previous</th><th>Current</th></tr></thead>
+    <tbody>
+    {% for c in changed_fields %}
+      <tr><td>{{ c.label }}</td><td class="diff-old">{{ c.old or '—' }}</td><td class="diff-new">{{ c.new or '—' }}</td></tr>
+    {% endfor %}
+    {% for t in tables_changed %}
+      <tr><td>{{ t }}</td><td colspan="2" class="muted">Checklist/table rows changed — see full details above.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">No differences from the previous inspection.</p>
+  {% endif %}
+  {% else %}
+  <p class="muted">This is the first recorded inspection of this type for this {{ 'asset' if inspection['asset_id'] else 'site' }} — nothing to compare yet.</p>
+  {% endif %}
+</div>
+
 {% if cfg %}
 {% for section in cfg.sections %}
 <div class="panel">

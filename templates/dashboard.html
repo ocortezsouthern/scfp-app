@@ -62,6 +62,17 @@
     </label>
     <label>Work Order / PO # <span class="muted">(auto-suggested — edit or paste a customer PO #)</span><input type="text" name="work_order_number" value="{{ suggested_wo }}"></label>
     <label class="span2">What's needed / reason for the call *<textarea name="description" required placeholder="e.g. Pull station activated, no fire — needs reset and inspection"></textarea></label>
+    <div class="span2">
+      <button type="button" class="btn small" onclick="document.getElementById('dash-inspections').classList.toggle('open')">+ Schedule inspection(s) for this call</button>
+    </div>
+    <div id="dash-inspections" class="collapsible span2">
+      <p class="muted" style="margin-top:6px">Check every inspection this visit needs to cover (wet system, fire pump, backflow, fire alarm, etc.) — right after you add this call you'll fill out each one in turn. Only works if a site is selected or created above.</p>
+      <div class="checkbox-grid">
+        {% for key, label in all_types %}
+        <label class="checkbox-chip"><input type="checkbox" name="inspection_types" value="{{ key }}"> {{ label }}</label>
+        {% endfor %}
+      </div>
+    </div>
     <div class="span2"><button type="submit" class="btn primary">Add to Tracker</button></div>
   </form>
 </div>
@@ -70,10 +81,67 @@
   <div class="stat-card danger"><div class="stat-num">{{ counts.overdue }}</div><div class="stat-label">Overdue</div></div>
   <div class="stat-card warn"><div class="stat-num">{{ counts.due_soon }}</div><div class="stat-label">Due in 30 days</div></div>
   <div class="stat-card warn"><div class="stat-num">{{ counts.open_calls }}</div><div class="stat-label">Open Service Calls</div></div>
+  <div class="stat-card warn"><div class="stat-num">{{ counts.open_repairs }}</div><div class="stat-label">Open Repairs</div></div>
   <div class="stat-card"><div class="stat-num">{{ counts.total_clients }}</div><div class="stat-label">Clients</div></div>
   <div class="stat-card"><div class="stat-num">{{ counts.total_sites }}</div><div class="stat-label">Sites</div></div>
   <div class="stat-card"><div class="stat-num">{{ counts.total_inspections }}</div><div class="stat-label">Inspections Logged</div></div>
 </div>
+
+<section class="panel">
+  <h2>Needs Follow-Up</h2>
+  <p class="muted" style="margin-top:-6px">Calls that were closed out but still need material/repairs finished or a return trip made. Stays here until the status is updated again.</p>
+  {% if followup_calls %}
+  <div class="table-scroll">
+<table class="data-table">
+    <thead><tr><th>Date</th><th>WO / PO #</th><th>Customer / Site</th><th>Status</th><th>Assigned</th><th></th></tr></thead>
+    <tbody>
+    {% for c in followup_calls %}
+      <tr>
+        <td>{{ c['scheduled_date'] }}</td>
+        <td>{{ c['work_order_number'] or '—' }}</td>
+        <td>{% if c['site_id'] %}<a href="/sites/{{ c['site_id'] }}">{{ c['client_name'] }} — {{ c['site_name'] }}</a>{% else %}{{ c['customer_name'] or '—' }}{% endif %}</td>
+        <td><span class="badge badge-warn">{{ c['status'] }}</span></td>
+        <td>{{ c['assigned_to_name'] or '—' }}</td>
+        <td><a href="/service-calls/{{ c['id'] }}">View</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+  {% else %}
+  <p class="muted">Nothing waiting on follow-up.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Open Repairs</h2>
+  {% if open_repairs %}
+  <div class="table-scroll">
+<table class="data-table">
+    <thead><tr><th>Reported</th><th>Site</th><th>Description</th><th>Asset</th><th></th></tr></thead>
+    <tbody>
+    {% for r in open_repairs %}
+      <tr>
+        <td>{{ r['reported_date'] }}</td>
+        <td><a href="/sites/{{ r['site_id'] }}">{{ r['client_name'] }} — {{ r['site_name'] }}</a></td>
+        <td>{{ r['description'][:70] }}{% if r['description']|length > 70 %}…{% endif %}</td>
+        <td>{{ r['asset_label'] or '—' }}</td>
+        <td>
+          <form method="post" action="/repairs/{{ r['id'] }}/complete" style="display:inline">
+            <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+            <input type="hidden" name="back" value="/">
+            <button type="submit" class="btn small">Mark Completed</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+  {% else %}
+  <p class="muted">No open repairs. <a href="/repairs">View repair log</a></p>
+  {% endif %}
+</section>
 
 <section class="panel">
   <h2>Upcoming &amp; Emergency Service Calls</h2>
