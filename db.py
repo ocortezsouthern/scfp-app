@@ -103,7 +103,10 @@ CREATE TABLE IF NOT EXISTS inspections (
     service_call_id INTEGER REFERENCES service_calls(id),   -- set when this inspection was scheduled/started from a service call
     manager_name TEXT,           -- on-site manager sign-off, captured from the app
     manager_sign_date TEXT,
-    manager_signature BLOB       -- PNG bytes from the signature pad
+    manager_signature BLOB,      -- PNG bytes from the signature pad
+    tech_signoff_name TEXT,      -- on-site technician sign-off (separate from inspector_id/who logged it)
+    tech_sign_date TEXT,
+    tech_signature BLOB
 );
 
 CREATE TABLE IF NOT EXISTS service_calls (
@@ -124,9 +127,14 @@ CREATE TABLE IF NOT EXISTS service_calls (
     check_in_time TEXT,     -- on-site arrival time (HH:MM), filled in by the tech from the app
     check_out_time TEXT,    -- on-site departure time (HH:MM)
     work_performed TEXT,    -- description of work completed, filled in by the tech from the app
+    num_technicians TEXT,   -- number of technicians on site
+    technician_names TEXT,  -- name(s) of technician(s) on site
     manager_name TEXT,      -- on-site manager sign-off, captured from the app
     manager_sign_date TEXT,
     manager_signature BLOB, -- PNG bytes from the signature pad
+    tech_signoff_name TEXT, -- on-site technician sign-off
+    tech_sign_date TEXT,
+    tech_signature BLOB,
     created_by INTEGER REFERENCES users(id),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -242,6 +250,17 @@ def _migrate(conn):
         conn.execute("ALTER TABLE inspections ADD COLUMN manager_name TEXT")
         conn.execute("ALTER TABLE inspections ADD COLUMN manager_sign_date TEXT")
         conn.execute("ALTER TABLE inspections ADD COLUMN manager_signature BLOB")
+    if not _column_exists(conn, "service_calls", "num_technicians"):
+        conn.execute("ALTER TABLE service_calls ADD COLUMN num_technicians TEXT")
+        conn.execute("ALTER TABLE service_calls ADD COLUMN technician_names TEXT")
+    if not _column_exists(conn, "service_calls", "tech_signoff_name"):
+        conn.execute("ALTER TABLE service_calls ADD COLUMN tech_signoff_name TEXT")
+        conn.execute("ALTER TABLE service_calls ADD COLUMN tech_sign_date TEXT")
+        conn.execute("ALTER TABLE service_calls ADD COLUMN tech_signature BLOB")
+    if not _column_exists(conn, "inspections", "tech_signoff_name"):
+        conn.execute("ALTER TABLE inspections ADD COLUMN tech_signoff_name TEXT")
+        conn.execute("ALTER TABLE inspections ADD COLUMN tech_sign_date TEXT")
+        conn.execute("ALTER TABLE inspections ADD COLUMN tech_signature BLOB")
     conn.commit()
 
 
@@ -755,6 +774,26 @@ def get_inspection_signature(inspection_id):
     return row["manager_signature"] if row else None
 
 
+def set_inspection_tech_signoff(inspection_id, tech_signoff_name, tech_sign_date, tech_signature=None):
+    fields = ["tech_signoff_name = ?", "tech_sign_date = ?"]
+    params = [tech_signoff_name, tech_sign_date]
+    if tech_signature is not None:
+        fields.append("tech_signature = ?")
+        params.append(tech_signature)
+    params.append(inspection_id)
+    conn = get_conn()
+    conn.execute(f"UPDATE inspections SET {', '.join(fields)} WHERE id = ?", params)
+    conn.commit()
+    conn.close()
+
+
+def get_inspection_tech_signature(inspection_id):
+    conn = get_conn()
+    row = conn.execute("SELECT tech_signature FROM inspections WHERE id = ?", (inspection_id,)).fetchone()
+    conn.close()
+    return row["tech_signature"] if row else None
+
+
 def get_inspection(inspection_id):
     conn = get_conn()
     row = conn.execute(
@@ -925,6 +964,20 @@ def get_service_call_signature(call_id):
     row = conn.execute("SELECT manager_signature FROM service_calls WHERE id = ?", (call_id,)).fetchone()
     conn.close()
     return row["manager_signature"] if row else None
+
+
+def set_service_call_tech_signoff(call_id, tech_signoff_name, tech_sign_date, tech_signature=None):
+    fields = {"tech_signoff_name": tech_signoff_name, "tech_sign_date": tech_sign_date}
+    if tech_signature is not None:
+        fields["tech_signature"] = tech_signature
+    update_service_call(call_id, **fields)
+
+
+def get_service_call_tech_signature(call_id):
+    conn = get_conn()
+    row = conn.execute("SELECT tech_signature FROM service_calls WHERE id = ?", (call_id,)).fetchone()
+    conn.close()
+    return row["tech_signature"] if row else None
 
 
 def get_service_call(call_id):

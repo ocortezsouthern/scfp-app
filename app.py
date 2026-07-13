@@ -826,8 +826,40 @@ class ServiceCallOnsiteHandler(BaseHandler):
             check_in_time=self.get_body_argument("check_in_time", ""),
             check_out_time=self.get_body_argument("check_out_time", ""),
             work_performed=self.get_body_argument("work_performed", "").strip(),
+            num_technicians=self.get_body_argument("num_technicians", "").strip(),
+            technician_names=self.get_body_argument("technician_names", "").strip(),
         )
         self.redirect(f"/service-calls/{call_id}")
+
+
+class ServiceCallTechSignoffHandler(BaseHandler):
+    """Technician name/signature/date sign-off, captured on-site from the
+    app instead of the blank 'Technician's Signature' line on the printed
+    work order. Separate from the manager sign-off above."""
+
+    @require_login
+    def post(self, call_id):
+        call_id = int(call_id)
+        if not db.get_service_call(call_id):
+            raise tornado.web.HTTPError(404)
+        signature_bytes = decode_signature_png(self.get_body_argument("signature_data", ""))
+        db.set_service_call_tech_signoff(
+            call_id,
+            tech_signoff_name=self.get_body_argument("tech_signoff_name", "").strip(),
+            tech_sign_date=self.get_body_argument("tech_sign_date", "").strip(),
+            tech_signature=signature_bytes,
+        )
+        self.redirect(f"/service-calls/{call_id}")
+
+
+class ServiceCallTechSignatureImageHandler(BaseHandler):
+    @require_login
+    def get(self, call_id):
+        sig = db.get_service_call_tech_signature(int(call_id))
+        if not sig:
+            raise tornado.web.HTTPError(404)
+        self.set_header("Content-Type", "image/png")
+        self.write(sig)
 
 
 class ServiceCallSignoffHandler(BaseHandler):
@@ -1238,6 +1270,36 @@ class InspectionSignatureImageHandler(BaseHandler):
         self.write(sig)
 
 
+class InspectionTechSignoffHandler(BaseHandler):
+    """Technician name/signature/date sign-off, captured on-site from the
+    app instead of the blank 'Technician's Signature' line on the printed
+    inspection report. Separate from the manager sign-off above."""
+
+    @require_login
+    def post(self, inspection_id):
+        inspection_id = int(inspection_id)
+        if not db.get_inspection(inspection_id):
+            raise tornado.web.HTTPError(404)
+        signature_bytes = decode_signature_png(self.get_body_argument("signature_data", ""))
+        db.set_inspection_tech_signoff(
+            inspection_id,
+            tech_signoff_name=self.get_body_argument("tech_signoff_name", "").strip(),
+            tech_sign_date=self.get_body_argument("tech_sign_date", "").strip(),
+            tech_signature=signature_bytes,
+        )
+        self.redirect(f"/inspections/{inspection_id}")
+
+
+class InspectionTechSignatureImageHandler(BaseHandler):
+    @require_login
+    def get(self, inspection_id):
+        sig = db.get_inspection_tech_signature(int(inspection_id))
+        if not sig:
+            raise tornado.web.HTTPError(404)
+        self.set_header("Content-Type", "image/png")
+        self.write(sig)
+
+
 class InspectionPdfHandler(BaseHandler):
     @require_login
     def get(self, inspection_id):
@@ -1328,6 +1390,8 @@ def make_app():
         (r"/service-calls/(\d+)/onsite", ServiceCallOnsiteHandler),
         (r"/service-calls/(\d+)/signoff", ServiceCallSignoffHandler),
         (r"/service-calls/(\d+)/signature", ServiceCallSignatureImageHandler),
+        (r"/service-calls/(\d+)/tech-signoff", ServiceCallTechSignoffHandler),
+        (r"/service-calls/(\d+)/tech-signature", ServiceCallTechSignatureImageHandler),
         (r"/service-calls/(\d+)/pdf", ServiceCallPdfHandler),
         (r"/service-calls/(\d+)/attachments", ServiceCallAttachmentsHandler),
         (r"/service-calls/(\d+)/attachments/(\d+)/file", ServiceCallAttachmentFileHandler),
@@ -1346,6 +1410,8 @@ def make_app():
         (r"/inspections/(\d+)/delete", InspectionDeleteHandler),
         (r"/inspections/(\d+)/signoff", InspectionSignoffHandler),
         (r"/inspections/(\d+)/signature", InspectionSignatureImageHandler),
+        (r"/inspections/(\d+)/tech-signoff", InspectionTechSignoffHandler),
+        (r"/inspections/(\d+)/tech-signature", InspectionTechSignatureImageHandler),
         (r"/inspections/(\d+)/pdf", InspectionPdfHandler),
         (r"/inspections/(\d+)/attachments", InspectionAttachmentsHandler),
         (r"/inspections/(\d+)/attachments/(\d+)/file", InspectionAttachmentFileHandler),

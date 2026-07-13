@@ -266,11 +266,17 @@ def generate_inspection_pdf(inspection_row, client_row, site_row, asset_row=None
         else "Manager Name: ______________________________"
     manager_date_text = f"Date: {inspection_row['manager_sign_date']}" if inspection_row["manager_sign_date"] \
         else "Date: ______________"
-    sig_image = _signature_image(inspection_row["manager_signature"])
+    manager_sig_image = _signature_image(inspection_row["manager_signature"])
+    tech_sig_name_text = f"Technician Name: {inspection_row['tech_signoff_name']}" if inspection_row["tech_signoff_name"] \
+        else "Technician Name: ______________________________"
+    tech_sig_date_text = f"Date: {inspection_row['tech_sign_date']}" if inspection_row["tech_sign_date"] \
+        else "Date: ______________"
+    tech_sig_image = _signature_image(inspection_row["tech_signature"])
     sig_rows = [
-        ["Technician's Signature: ___________________________", "Date: ______________"],
+        [tech_sig_name_text, ""],
+        [tech_sig_image or "Technician's Signature: ___________________________", tech_sig_date_text],
         [manager_name_text, ""],
-        [sig_image or "Manager's Signature: ______________________________", manager_date_text],
+        [manager_sig_image or "Manager's Signature: ______________________________", manager_date_text],
     ]
     sig_tbl = Table(sig_rows, colWidths=[5 * inch, PAGE_WIDTH - 5 * inch])
     sig_tbl.setStyle(TableStyle([
@@ -372,9 +378,13 @@ def generate_service_call_pdf(call):
     story.append(Spacer(1, 6))
     arrival_text = f"Arrival Time: {call['check_in_time']}" if call["check_in_time"] else "Arrival Time: _______________"
     departure_text = f"Departure Time: {call['check_out_time']}" if call["check_out_time"] else "Departure Time: _______________"
+    num_tech_text = f"Number of Technicians: {call['num_technicians']}" if call["num_technicians"] \
+        else "Number of Technicians: _______"
+    tech_names_text = f"Name(s) of Technician(s): {call['technician_names']}" if call["technician_names"] \
+        else "Name(s) of Technician(s): ___________________"
     onsite_tbl = Table([
         [arrival_text, departure_text],
-        ["Number of Technicians: _______", "Name(s) of Technician(s): ___________________"],
+        [num_tech_text, tech_names_text],
     ], colWidths=[PAGE_WIDTH / 2] * 2)
     onsite_tbl.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 9.5),
@@ -422,11 +432,16 @@ def generate_service_call_pdf(call):
     manager_name_text = f"Customer / Manager Name: {call['manager_name']}" if call["manager_name"] \
         else "Customer / Manager Name: _________________________"
     manager_date_text = f"Date: {call['manager_sign_date']}" if call["manager_sign_date"] else "Date: ______________"
-    sig_image = _signature_image(call["manager_signature"])
+    manager_sig_image = _signature_image(call["manager_signature"])
+    tech_sig_name_text = f"Technician Name: {call['tech_signoff_name']}" if call["tech_signoff_name"] \
+        else "Technician Name: ___________________________"
+    tech_sig_date_text = f"Date: {call['tech_sign_date']}" if call["tech_sign_date"] else "Date: ______________"
+    tech_sig_image = _signature_image(call["tech_signature"])
     sig_rows = [
-        ["Technician's Signature: ___________________________", "Date: ______________"],
+        [tech_sig_name_text, ""],
+        [tech_sig_image or "Technician's Signature: ___________________________", tech_sig_date_text],
         [manager_name_text, ""],
-        [sig_image or "Customer / Manager Signature: _____________________", manager_date_text],
+        [manager_sig_image or "Customer / Manager Signature: _____________________", manager_date_text],
     ]
     sig_tbl = Table(sig_rows, colWidths=[5 * inch, PAGE_WIDTH - 5 * inch])
     sig_tbl.setStyle(TableStyle([
