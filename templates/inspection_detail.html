@@ -150,4 +150,39 @@
   {% endfor %}
   </table>
 </div>
+
+<div class="panel">
+  <h2>✍️ Manager Sign-Off</h2>
+  <p class="muted" style="margin-top:-6px">Manager name, signature, and date confirming this inspection — this also fills in the printed report.</p>
+  {% if inspection['manager_signature'] %}
+  <div class="signed-block">
+    <img class="signature-preview" src="/inspections/{{ inspection['id'] }}/signature" alt="Manager signature">
+    <div class="signed-meta">
+      <strong>{{ inspection['manager_name'] or '—' }}</strong><br>
+      Signed {{ inspection['manager_sign_date'] or '—' }}
+    </div>
+  </div>
+  <button type="button" class="btn small" onclick="document.getElementById('insp-signoff-form').classList.toggle('open')">Re-sign</button>
+  <div id="insp-signoff-form" class="collapsible">
+  {% else %}
+  <div id="insp-signoff-form" class="collapsible open">
+  {% endif %}
+    <form method="post" action="/inspections/{{ inspection['id'] }}/signoff" class="form-grid" style="margin-top:10px;">
+      <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+      <label>Manager Name<input type="text" name="manager_name" value="{{ inspection['manager_name'] or '' }}"></label>
+      <label>Date<input type="date" name="manager_sign_date" value="{{ inspection['manager_sign_date'] or today }}"></label>
+      <label class="span2">Signature
+        <div class="signature-pad">
+          <div class="sig-canvas-wrap"><canvas class="signature-canvas"></canvas></div>
+          <div class="sig-actions">
+            <button type="button" class="btn small sig-clear-btn">Clear</button>
+            <span class="muted">Sign with mouse or finger</span>
+          </div>
+          <input type="hidden" name="signature_data" class="signature-data-input">
+        </div>
+      </label>
+      <div class="span2"><button type="submit" class="btn primary">Save Sign-Off</button></div>
+    </form>
+  </div>
+</div>
 {% endblock %}
