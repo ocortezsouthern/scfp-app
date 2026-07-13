@@ -913,6 +913,12 @@ def count_open_service_calls():
 
 def delete_service_call(call_id):
     conn = get_conn()
+    # Inspections logged against this call (via the schedule + fill-in-now
+    # flow) reference it with no ON DELETE rule, so SQLite blocks the delete
+    # with a foreign key error unless we unlink them first. The inspection
+    # records themselves are real compliance history and must NOT be
+    # deleted — only the link back to this call is cleared.
+    conn.execute("UPDATE inspections SET service_call_id = NULL WHERE service_call_id = ?", (call_id,))
     conn.execute("DELETE FROM service_calls WHERE id = ?", (call_id,))
     conn.commit()
     conn.close()
