@@ -342,11 +342,14 @@ def generate_service_call_pdf(call):
         story.append(Paragraph("Office Notes: " + call["notes"], styles["SCFPSub"]))
     story.append(Spacer(1, 10))
 
-    # --- On-site completion (blank fill-in lines for the technician) ---
+    # --- On-site completion — uses what the tech recorded in the app when
+    # available, otherwise falls back to blank fill-in lines for hand-writing ---
     story.append(_section_header("On-Site Verification — To Be Completed by Technician", styles))
     story.append(Spacer(1, 6))
+    arrival_text = f"Arrival Time: {call['check_in_time']}" if call["check_in_time"] else "Arrival Time: _______________"
+    departure_text = f"Departure Time: {call['check_out_time']}" if call["check_out_time"] else "Departure Time: _______________"
     onsite_tbl = Table([
-        ["Arrival Time: _______________", "Departure Time: _______________"],
+        [arrival_text, departure_text],
         ["Number of Technicians: _______", "Name(s) of Technician(s): ___________________"],
     ], colWidths=[PAGE_WIDTH / 2] * 2)
     onsite_tbl.setStyle(TableStyle([
@@ -359,9 +362,21 @@ def generate_service_call_pdf(call):
     story.append(Paragraph("Description of Work Completed (include all work done and materials used):",
                             styles["SCFPLabel"]))
     story.append(Spacer(1, 4))
-    blank_box = Table([[""]], colWidths=[PAGE_WIDTH], rowHeights=[0.9 * inch])
-    blank_box.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), 0.6, RULE_GRAY)]))
-    story.append(blank_box)
+    if call["work_performed"]:
+        work_box = Table([[Paragraph(call["work_performed"], styles["SCFPValue"])]],
+                          colWidths=[PAGE_WIDTH])
+        work_box.setStyle(TableStyle([
+            ("BOX", (0, 0), (-1, -1), 0.6, RULE_GRAY),
+            ("TOPPADDING", (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ]))
+        story.append(work_box)
+    else:
+        blank_box = Table([[""]], colWidths=[PAGE_WIDTH], rowHeights=[0.9 * inch])
+        blank_box.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), 0.6, RULE_GRAY)]))
+        story.append(blank_box)
     story.append(Spacer(1, 10))
     yn_tbl = Table([
         ["Is this system properly tagged and/or compliant?   [   ] Yes     [   ] No"],

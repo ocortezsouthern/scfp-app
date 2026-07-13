@@ -118,6 +118,9 @@ CREATE TABLE IF NOT EXISTS service_calls (
     assigned_to INTEGER REFERENCES users(id),
     status TEXT NOT NULL DEFAULT 'Scheduled',   -- Scheduled / In Progress / Completed / Cancelled
     notes TEXT,
+    check_in_time TEXT,     -- on-site arrival time (HH:MM), filled in by the tech from the app
+    check_out_time TEXT,    -- on-site departure time (HH:MM)
+    work_performed TEXT,    -- description of work completed, filled in by the tech from the app
     created_by INTEGER REFERENCES users(id),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -219,6 +222,12 @@ def _migrate(conn):
     if not _column_exists(conn, "inspections", "service_call_id"):
         conn.execute("ALTER TABLE inspections ADD COLUMN service_call_id INTEGER REFERENCES service_calls(id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_inspections_call ON inspections(service_call_id)")
+    if not _column_exists(conn, "service_calls", "check_in_time"):
+        conn.execute("ALTER TABLE service_calls ADD COLUMN check_in_time TEXT")
+    if not _column_exists(conn, "service_calls", "check_out_time"):
+        conn.execute("ALTER TABLE service_calls ADD COLUMN check_out_time TEXT")
+    if not _column_exists(conn, "service_calls", "work_performed"):
+        conn.execute("ALTER TABLE service_calls ADD COLUMN work_performed TEXT")
     conn.commit()
 
 

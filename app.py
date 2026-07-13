@@ -773,6 +773,26 @@ class ServiceCallEditHandler(BaseHandler):
         self.redirect(f"/service-calls/{call_id}")
 
 
+class ServiceCallOnsiteHandler(BaseHandler):
+    """Lets the tech record arrival/departure time and what work was done,
+    right from the app — the same info the paper work order asks for under
+    'On-Site Verification', but now captured digitally and pulled into the
+    printed PDF instead of being left as blank fill-in lines."""
+
+    @require_login
+    def post(self, call_id):
+        call_id = int(call_id)
+        if not db.get_service_call(call_id):
+            raise tornado.web.HTTPError(404)
+        db.update_service_call(
+            call_id,
+            check_in_time=self.get_body_argument("check_in_time", ""),
+            check_out_time=self.get_body_argument("check_out_time", ""),
+            work_performed=self.get_body_argument("work_performed", "").strip(),
+        )
+        self.redirect(f"/service-calls/{call_id}")
+
+
 class ServiceCallStatusHandler(BaseHandler):
     @require_login
     def post(self, call_id):
@@ -1209,6 +1229,7 @@ def make_app():
         (r"/service-calls", ServiceCallsHandler),
         (r"/service-calls/(\d+)", ServiceCallDetailHandler),
         (r"/service-calls/(\d+)/edit", ServiceCallEditHandler),
+        (r"/service-calls/(\d+)/onsite", ServiceCallOnsiteHandler),
         (r"/service-calls/(\d+)/pdf", ServiceCallPdfHandler),
         (r"/service-calls/(\d+)/attachments", ServiceCallAttachmentsHandler),
         (r"/service-calls/(\d+)/attachments/(\d+)/file", ServiceCallAttachmentFileHandler),
