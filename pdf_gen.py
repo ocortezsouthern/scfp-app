@@ -412,9 +412,18 @@ def generate_service_call_pdf(call):
         blank_box.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), 0.6, RULE_GRAY)]))
         story.append(blank_box)
     story.append(Spacer(1, 10))
+
+    def _yn_line(value):
+        yes_mark = "X" if value == "Yes" else " "
+        no_mark = "X" if value == "No" else " "
+        return f"[ {yes_mark} ] Yes     [ {no_mark} ] No"
+
+    tagged_line = "Is this system properly tagged and/or compliant?   " + _yn_line(call["system_tagged_compliant"])
+    return_trip_line = "Is a return trip needed?   " + _yn_line(call["return_trip_needed"])
+    return_trip_line += "     Note: " + (call["return_trip_note"] or "______________________________")
     yn_tbl = Table([
-        ["Is this system properly tagged and/or compliant?   [   ] Yes     [   ] No"],
-        ["Is a return trip needed?   [   ] Yes     [   ] No     Note: ______________________________"],
+        [tagged_line],
+        [return_trip_line],
     ], colWidths=[PAGE_WIDTH])
     yn_tbl.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 9.5),

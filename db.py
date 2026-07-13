@@ -129,6 +129,9 @@ CREATE TABLE IF NOT EXISTS service_calls (
     work_performed TEXT,    -- description of work completed, filled in by the tech from the app
     num_technicians TEXT,   -- number of technicians on site
     technician_names TEXT,  -- name(s) of technician(s) on site
+    system_tagged_compliant TEXT,  -- 'Yes' / 'No' — is the system properly tagged and/or compliant?
+    return_trip_needed TEXT,       -- 'Yes' / 'No' — is a return trip needed?
+    return_trip_note TEXT,         -- optional note explaining the return trip
     manager_name TEXT,      -- on-site manager sign-off, captured from the app
     manager_sign_date TEXT,
     manager_signature BLOB, -- PNG bytes from the signature pad
@@ -277,6 +280,10 @@ def _migrate(conn):
         conn.execute("ALTER TABLE inspections ADD COLUMN tech_signoff_name TEXT")
         conn.execute("ALTER TABLE inspections ADD COLUMN tech_sign_date TEXT")
         conn.execute("ALTER TABLE inspections ADD COLUMN tech_signature BLOB")
+    if not _column_exists(conn, "service_calls", "system_tagged_compliant"):
+        conn.execute("ALTER TABLE service_calls ADD COLUMN system_tagged_compliant TEXT")
+        conn.execute("ALTER TABLE service_calls ADD COLUMN return_trip_needed TEXT")
+        conn.execute("ALTER TABLE service_calls ADD COLUMN return_trip_note TEXT")
     conn.commit()
 
 

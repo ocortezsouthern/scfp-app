@@ -988,6 +988,9 @@ class ServiceCallOnsiteHandler(BaseHandler):
             work_performed=self.get_body_argument("work_performed", "").strip(),
             num_technicians=self.get_body_argument("num_technicians", "").strip(),
             technician_names=self.get_body_argument("technician_names", "").strip(),
+            system_tagged_compliant=self.get_body_argument("system_tagged_compliant", "").strip(),
+            return_trip_needed=self.get_body_argument("return_trip_needed", "").strip(),
+            return_trip_note=self.get_body_argument("return_trip_note", "").strip(),
         )
         self.redirect(f"/service-calls/{call_id}")
 
