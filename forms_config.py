@@ -706,6 +706,23 @@ def asset_prefill_data(asset, inspection_type):
     return data
 
 
+def asset_fields_from_form(inspection_type, form_data):
+    """The reverse of asset_prefill_data: when an inspection is logged
+    against a brand-new piece of equipment that isn't on file yet, pulls
+    manufacturer/model/serial/size/location straight out of whatever the
+    inspector already typed into the form, so the new Asset record gets
+    populated automatically instead of asking for the same details twice."""
+    mapping = ASSET_FIELD_MAP.get(inspection_type)
+    if not mapping:
+        return {}
+    fields = {}
+    for asset_col, form_key in mapping.items():
+        val = (form_data or {}).get(form_key)
+        if val:
+            fields[asset_col] = val
+    return fields
+
+
 def get_type_config(inspection_type):
     return INSPECTION_TYPES.get(inspection_type)
 

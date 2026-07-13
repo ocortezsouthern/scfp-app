@@ -20,7 +20,8 @@ import jinja2
 import db
 import auth
 import pdf_gen
-from forms_config import INSPECTION_TYPES, get_type_config, CLOSING_SECTION, all_types, asset_prefill_data
+from forms_config import (INSPECTION_TYPES, get_type_config, CLOSING_SECTION, all_types,
+                           asset_prefill_data, asset_fields_from_form)
 
 BASE_DIR = os.path.dirname(__file__)
 JINJA_ENV = jinja2.Environment(
@@ -572,7 +573,7 @@ class ServiceCallDetailHandler(BaseHandler):
                          attachments=db.list_attachments(call_id), attachment_kinds=db.ATTACHMENT_KINDS,
                          linked_inspections=db.list_inspections(service_call_id=call_id),
                          repairs=db.list_repairs(service_call_id=call_id), site_assets=site_assets,
-                         type_cfg=INSPECTION_TYPES)
+                         type_cfg=INSPECTION_TYPES, new_asset=self.get_argument("new_asset", ""))
 
 
 MAX_ATTACHMENT_SIZE = 15 * 1024 * 1024  # 15MB per file — generous for phone photos, PDFs, etc.
@@ -817,14 +818,17 @@ class InspectionNewHandler(BaseHandler):
         remaining = self.get_argument("remaining", "")
         cfg = get_type_config(inspection_type) if inspection_type else None
         site = db.get_site(int(site_id)) if site_id else None
-        asset = db.get_asset(int(asset_id)) if asset_id else None
+        asset = db.get_asset(int(asset_id)) if asset_id and asset_id.isdigit() else None
         assets = db.list_assets(site_id=int(site_id)) if site_id else []
         prefill = asset_prefill_data(asset, inspection_type) if asset else {}
+        offer_new_asset = bool(cfg) and cfg.get("asset_scope") != "site"
+        suggested_asset_label = cfg["label"].replace(" Inspection", "").replace("Annual ", "") if offer_new_asset else ""
         self.render_tpl("inspection_form.html", cfg=cfg, inspection_type=inspection_type,
                          site=site, asset=asset, assets=assets, closing=CLOSING_SECTION,
                          site_id=site_id, asset_id=asset_id, data=prefill,
                          prefilled_from_asset=bool(prefill),
-                         service_call_id=service_call_id, remaining=remaining)
+                         service_call_id=service_call_id, remaining=remaining,
+                         offer_new_asset=offer_new_asset, suggested_asset_label=suggested_asset_label)
 
     @require_login
     def post(self):
@@ -833,14 +837,27 @@ class InspectionNewHandler(BaseHandler):
         if not cfg:
             raise tornado.web.HTTPError(400, "Unknown inspection type")
         site_id = int(self.get_body_argument("site_id"))
-        asset_id = self.get_body_argument("asset_id", "") or None
-        asset_id = int(asset_id) if asset_id else None
+        asset_id_raw = self.get_body_argument("asset_id", "")
         inspection_date = self.get_body_argument("inspection_date", db.today_iso())
         service_call_id = self.get_body_argument("service_call_id", "") or None
         service_call_id = int(service_call_id) if service_call_id else None
         remaining = self.get_body_argument("remaining", "")
 
         data = parse_form_data(self, cfg)
+
+        new_asset_created = False
+        if asset_id_raw == "__new__" and cfg.get("asset_scope") != "site":
+            # Equipment isn't on file yet — add it to the site now, using
+            # whatever manufacturer/model/serial/location the inspector
+            # already typed into the form so nothing has to be re-entered.
+            label = self.get_body_argument("new_asset_label", "").strip() or cfg["label"]
+            asset_fields = asset_fields_from_form(inspection_type, data)
+            asset_id = db.create_asset(site_id, cfg["asset_scope"], label, **asset_fields)
+            new_asset_created = True
+        elif asset_id_raw and asset_id_raw.isdigit():
+            asset_id = int(asset_id_raw)
+        else:
+            asset_id = None
 
         overall_result = data.get("overall_result", "")
         system_impaired = 1 if data.get("system_impaired") == "Yes" else 0
@@ -857,6 +874,8 @@ class InspectionNewHandler(BaseHandler):
         if overall_result != "Incomplete":
             db.upsert_schedule(site_id, asset_id, inspection_type, cfg["frequency_months"], inspection_date)
 
+        new_asset_qs = "new_asset=1" if new_asset_created else ""
+
         # Part of a "schedule + fill in immediately" chain from a service
         # call — move on to the next requested inspection type, or if this
         # was the last one, head back to the work order.
@@ -871,10 +890,16 @@ class InspectionNewHandler(BaseHandler):
             self.redirect(url)
             return
         if service_call_id:
-            self.redirect(f"/service-calls/{service_call_id}")
+            url = f"/service-calls/{service_call_id}"
+            if new_asset_qs:
+                url += f"?{new_asset_qs}"
+            self.redirect(url)
             return
 
-        self.redirect(f"/inspections/{iid}")
+        url = f"/inspections/{iid}"
+        if new_asset_qs:
+            url += f"?{new_asset_qs}"
+        self.redirect(url)
 
 
 class InspectionEditHandler(BaseHandler):
@@ -962,7 +987,8 @@ class InspectionDetailHandler(BaseHandler):
             changed_fields, tables_changed = build_inspection_diff(cfg, data, prev_data)
         self.render_tpl("inspection_detail.html", inspection=inspection, cfg=cfg,
                          data=data, closing=CLOSING_SECTION, prev=prev,
-                         changed_fields=changed_fields, tables_changed=tables_changed)
+                         changed_fields=changed_fields, tables_changed=tables_changed,
+                         new_asset=self.get_argument("new_asset", ""))
 
 
 class InspectionDeleteHandler(BaseHandler):
