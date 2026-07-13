@@ -21,7 +21,7 @@ import db
 import auth
 import pdf_gen
 from forms_config import (INSPECTION_TYPES, get_type_config, CLOSING_SECTION, all_types,
-                           asset_prefill_data, asset_fields_from_form)
+                           asset_prefill_data, asset_fields_from_form, ASSET_FIELD_MAP)
 
 BASE_DIR = os.path.dirname(__file__)
 JINJA_ENV = jinja2.Environment(
@@ -823,12 +823,15 @@ class InspectionNewHandler(BaseHandler):
         prefill = asset_prefill_data(asset, inspection_type) if asset else {}
         offer_new_asset = bool(cfg) and cfg.get("asset_scope") != "site"
         suggested_asset_label = cfg["label"].replace(" Inspection", "").replace("Annual ", "") if offer_new_asset else ""
+        assets_for_js = [dict(a) for a in assets]
+        asset_field_map = ASSET_FIELD_MAP.get(inspection_type, {})
         self.render_tpl("inspection_form.html", cfg=cfg, inspection_type=inspection_type,
                          site=site, asset=asset, assets=assets, closing=CLOSING_SECTION,
                          site_id=site_id, asset_id=asset_id, data=prefill,
                          prefilled_from_asset=bool(prefill),
                          service_call_id=service_call_id, remaining=remaining,
-                         offer_new_asset=offer_new_asset, suggested_asset_label=suggested_asset_label)
+                         offer_new_asset=offer_new_asset, suggested_asset_label=suggested_asset_label,
+                         assets_for_js=assets_for_js, asset_field_map=asset_field_map)
 
     @require_login
     def post(self):

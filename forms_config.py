@@ -95,7 +95,11 @@ INSPECTION_TYPES = {
                 {"key": "init_check_valve_psid", "label": "Check Valve Held PSID", "type": "number"},
                 {"key": "initial_test_result", "label": "Initial Test Result", "type": "select", "options": PF_OPTIONS},
             ]},
-            {"name": "Repairs", "fields": [
+            {"name": "Repairs", "collapsible": True,
+             "collapsible_label": "+ Repairs Were Made",
+             "collapsible_hint": "Only needed if the initial test failed and something had to be repaired.",
+             "auto_reveal": {"field": "initial_test_result", "equals": "Fail"},
+             "fields": [
                 {"key": "repair_cv1", "label": "Check Valve #1 Repair", "type": "select",
                  "options": ["", "Cleaned", "Rubber Kit", "Other"]},
                 {"key": "repair_cv1_note", "label": "Check Valve #1 Repair Notes", "type": "text"},
@@ -109,7 +113,11 @@ INSPECTION_TYPES = {
                  "options": ["", "Cleaned", "Rubber Kit", "Other"]},
                 {"key": "repair_backpressure_note", "label": "Back Pressure / PVB Repair Notes", "type": "text"},
             ]},
-            {"name": "Final Test", "fields": [
+            {"name": "Final Test", "collapsible": True,
+             "collapsible_label": "+ Final Test (after repairs)",
+             "collapsible_hint": "Only needed to confirm the device passes after a repair was made.",
+             "auto_reveal": {"field": "initial_test_result", "equals": "Fail"},
+             "fields": [
                 {"key": "final_cv1_result", "label": "Check Valve #1", "type": "select", "options": ["Closed Tight", "Leaked"]},
                 {"key": "final_cv1_rp_psid", "label": "Check Valve #1 RP PSID", "type": "number"},
                 {"key": "final_cv1_dc_psid", "label": "Check Valve #1 DC PSID", "type": "number"},
