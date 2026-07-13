@@ -1012,6 +1012,7 @@ class ServiceCallTechSignoffHandler(BaseHandler):
             tech_sign_date=self.get_body_argument("tech_sign_date", "").strip(),
             tech_signature=signature_bytes,
         )
+        db.propagate_service_call_signoffs(call_id)
         self.redirect(f"/service-calls/{call_id}")
 
 
@@ -1041,6 +1042,7 @@ class ServiceCallSignoffHandler(BaseHandler):
             manager_sign_date=self.get_body_argument("manager_sign_date", "").strip(),
             manager_signature=signature_bytes,
         )
+        db.propagate_service_call_signoffs(call_id)
         self.redirect(f"/service-calls/{call_id}")
 
 
@@ -1257,6 +1259,13 @@ class InspectionNewHandler(BaseHandler):
             overall_result, system_impaired, critical, non_critical, satisfactory,
             data, self.current_user["id"], service_call_id=service_call_id,
         )
+
+        if service_call_id:
+            # If the work order this inspection belongs to was already fully
+            # signed off (both manager + tech) before this inspection was
+            # logged, apply that same sign-off immediately instead of
+            # leaving this one report unsigned.
+            db.propagate_service_call_signoffs(service_call_id)
 
         if overall_result != "Incomplete":
             db.upsert_schedule(site_id, asset_id, inspection_type, cfg["frequency_months"], inspection_date)

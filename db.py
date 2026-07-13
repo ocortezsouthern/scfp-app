@@ -1007,6 +1007,38 @@ def get_service_call_tech_signature(call_id):
     return row["tech_signature"] if row else None
 
 
+def propagate_service_call_signoffs(call_id):
+    """Once BOTH the manager and the technician have signed off on a work
+    order, copy that same sign-off (name/date/signature, for both parties)
+    onto every inspection report that was logged under this service call —
+    so the tech doesn't have to re-sign each inspection separately. Runs
+    every time either sign-off is saved; a no-op until both are present,
+    and keeps inspections in sync if a signature is later re-signed."""
+    conn = get_conn()
+    call = conn.execute(
+        """SELECT manager_name, manager_sign_date, manager_signature,
+                  tech_signoff_name, tech_sign_date, tech_signature
+           FROM service_calls WHERE id = ?""",
+        (call_id,),
+    ).fetchone()
+    if not call or not call["manager_signature"] or not call["tech_signature"]:
+        conn.close()
+        return
+    conn.execute(
+        """
+        UPDATE inspections
+        SET manager_name = ?, manager_sign_date = ?, manager_signature = ?,
+            tech_signoff_name = ?, tech_sign_date = ?, tech_signature = ?
+        WHERE service_call_id = ?
+        """,
+        (call["manager_name"], call["manager_sign_date"], call["manager_signature"],
+         call["tech_signoff_name"], call["tech_sign_date"], call["tech_signature"],
+         call_id),
+    )
+    conn.commit()
+    conn.close()
+
+
 def get_service_call(call_id):
     conn = get_conn()
     row = conn.execute(SERVICE_CALL_JOIN + " WHERE service_calls.id = ?", (call_id,)).fetchone()
