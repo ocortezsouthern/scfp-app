@@ -2,6 +2,9 @@
 {% block title %}Service Call — SCFP Inspection Tracker{% endblock %}
 {% block content %}
 <div class="breadcrumb"><a href="/service-calls">Service Calls</a> / #{{ call['id'] }}</div>
+{% if new_asset %}
+<div class="notice">New equipment was added to this site while logging an inspection for this call — see the Inspections panel below.</div>
+{% endif %}
 <div class="page-head">
   <h1>{{ call['call_type'] }} — {% if call['site_id'] %}{{ call['site_name'] }}{% else %}{{ call['customer_name'] or 'Service Call' }}{% endif %}</h1>
   <div class="btn-group">

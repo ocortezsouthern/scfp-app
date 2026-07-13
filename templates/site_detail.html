@@ -64,6 +64,7 @@
         {% for a in assets %}
         <option value="{{ a['id'] }}">{{ a['label'] }}{% if a['status'] == 'inactive' %} (Out of Service){% endif %}</option>
         {% endfor %}
+        <option value="__new__">+ Add as new equipment (not on file yet)</option>
       </select>
     </label>
     <button type="submit" class="btn primary">Continue</button>

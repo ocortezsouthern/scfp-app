@@ -101,11 +101,14 @@
       </label>
       {% else %}
       <label>Equipment / Asset
-        <select name="asset_id">
+        <select name="asset_id" id="asset-select" onchange="document.getElementById('new-asset-row').style.display = (this.value === '__new__') ? '' : 'none'">
           <option value="">— Site-level (no specific asset) —</option>
           {% for a in assets %}
           <option value="{{ a['id'] }}" {% if asset and asset['id']==a['id'] %}selected{% endif %}>{{ a['label'] }}</option>
           {% endfor %}
+          {% if offer_new_asset %}
+          <option value="__new__" {% if asset_id == '__new__' %}selected{% endif %}>+ Add as new equipment (not on file yet)</option>
+          {% endif %}
         </select>
       </label>
       {% endif %}
@@ -113,6 +116,13 @@
         <input type="date" name="inspection_date" value="{{ inspection['inspection_date'] if edit_mode else today }}" required>
       </label>
     </div>
+    {% if not edit_mode and offer_new_asset %}
+    <div class="form-grid" id="new-asset-row" style="{% if asset_id != '__new__' %}display:none;{% endif %} margin-top:10px;">
+      <label class="span2">New Equipment Label <span class="muted">(only used when "+ Add as new equipment" is selected above — manufacturer/model/serial/location below will be saved to its record automatically)</span>
+        <input type="text" name="new_asset_label" value="{{ suggested_asset_label }}">
+      </label>
+    </div>
+    {% endif %}
     {% if edit_mode %}
     <p class="muted" style="margin-top:10px;margin-bottom:0;">Site, equipment, and inspection type are locked once an inspection is created. If this was logged against the wrong site or equipment, log a fresh inspection instead and leave a note in Comments on this one.</p>
     {% endif %}

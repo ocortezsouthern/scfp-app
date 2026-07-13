@@ -12,6 +12,9 @@
   <a href="/sites/{{ inspection['site_id'] }}">{{ inspection['site_name'] }}</a> /
   {{ cfg.label if cfg else inspection['inspection_type'] }}
 </div>
+{% if new_asset %}
+<div class="notice">New equipment record added to this site: <a href="/assets/{{ inspection['asset_id'] }}">{{ inspection['asset_label'] }}</a> — you can edit its details any time from its equipment page.</div>
+{% endif %}
 <div class="page-head">
   <h1>{{ cfg.label if cfg else inspection['inspection_type'] }}</h1>
   <div class="btn-group">
