@@ -72,5 +72,67 @@
         addRow(container, field, columns, rowIdx++);
       });
     });
+
+    // Manager sign-off signature pads — draw with mouse or touch, hidden
+    // input carries the PNG data URL along with the rest of the form.
+    document.querySelectorAll(".signature-pad").forEach(function (wrap) {
+      var canvas = wrap.querySelector(".signature-canvas");
+      var input = wrap.querySelector(".signature-data-input");
+      var clearBtn = wrap.querySelector(".sig-clear-btn");
+      if (!canvas || !input) { return; }
+      var ctx = canvas.getContext("2d");
+      var ratio = window.devicePixelRatio || 1;
+      var cssWidth = canvas.clientWidth || canvas.offsetWidth || 500;
+      var cssHeight = canvas.clientHeight || 150;
+      canvas.width = cssWidth * ratio;
+      canvas.height = cssHeight * ratio;
+      ctx.scale(ratio, ratio);
+      ctx.lineWidth = 2;
+      ctx.lineCap = "round";
+      ctx.strokeStyle = "#1a1a1a";
+
+      var drawing = false;
+      var hasStroke = false;
+
+      function pos(evt) {
+        var rect = canvas.getBoundingClientRect();
+        var point = evt.touches ? evt.touches[0] : evt;
+        return { x: point.clientX - rect.left, y: point.clientY - rect.top };
+      }
+      function start(evt) {
+        drawing = true;
+        var p = pos(evt);
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        evt.preventDefault();
+      }
+      function move(evt) {
+        if (!drawing) { return; }
+        var p = pos(evt);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+        hasStroke = true;
+        evt.preventDefault();
+      }
+      function end() {
+        if (!drawing) { return; }
+        drawing = false;
+        input.value = hasStroke ? canvas.toDataURL("image/png") : "";
+      }
+      canvas.addEventListener("mousedown", start);
+      canvas.addEventListener("mousemove", move);
+      window.addEventListener("mouseup", end);
+      canvas.addEventListener("touchstart", start, { passive: false });
+      canvas.addEventListener("touchmove", move, { passive: false });
+      canvas.addEventListener("touchend", end);
+
+      if (clearBtn) {
+        clearBtn.addEventListener("click", function () {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          hasStroke = false;
+          input.value = "";
+        });
+      }
+    });
   });
 })();

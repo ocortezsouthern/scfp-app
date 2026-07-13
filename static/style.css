@@ -147,6 +147,14 @@ textarea { min-height: 60px; resize: vertical; }
   color: var(--text); font-size: 12.5px; font-weight: 600; padding: 7px 10px; cursor: pointer;
 }
 .yn-btn:hover { border-color: var(--navy-light); }
+
+.signature-pad { margin-top: 6px; }
+.sig-canvas-wrap { border: 1px solid var(--border); border-radius: 6px; background: #fdfdfc; }
+.signature-canvas { display: block; width: 100%; height: 150px; touch-action: none; cursor: crosshair; }
+.sig-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+.signed-block { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 12px; }
+.signed-block img.signature-preview { max-width: 260px; max-height: 100px; border: 1px solid var(--border); border-radius: 6px; background: white; }
+.signed-block .signed-meta { font-size: 13px; color: var(--text); }
 .yn-btn.active[data-value="Yes"] { background: #e3f5e9; border-color: #1e7d3e; color: #1e7d3e; }
 .yn-btn.active[data-value="No"] { background: #fbe4e1; border-color: var(--accent); color: var(--accent); }
 .yn-btn.active[data-value="N/A"] { background: var(--bg); border-color: var(--muted); color: var(--text); }
