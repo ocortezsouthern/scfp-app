@@ -19,7 +19,7 @@
 
 <div class="panel">
   <table class="kv-table">
-    <tr><th>Status</th><td><span class="badge {{ 'badge-pass' if call['status']=='Completed' else ('badge-warn' if call['status']=='In Progress' else '') }}">{{ call['status'] }}</span></td>
+    <tr><th>Status</th><td><span class="badge {{ 'badge-pass' if call['status']=='Completed' else ('badge-warn' if call['status'] in ['In Progress', 'Completed - Repairs Required', 'Completed - Return Trip Required'] else '') }}">{{ call['status'] }}</span></td>
         <th>Type</th><td><span class="badge {{ 'badge-fail' if call['call_type']=='Emergency Call' else 'badge-info' }}">{{ call['call_type'] }}</span></td></tr>
     <tr><th>Scheduled</th><td>{{ call['scheduled_date'] }}{% if call['scheduled_time'] %} at {{ call['scheduled_time'] }}{% endif %}</td>
         <th>Assigned To</th><td>{{ call['assigned_to_name'] or 'Unassigned' }}</td></tr>
@@ -38,6 +38,52 @@
   {% if call['notes'] %}
   <h3 class="table-title">Notes</h3>
   <p>{{ call['notes'] }}</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2>Attachments</h2>
+  <p class="muted" style="margin-top:-6px">Photos, a material list, or a deficiency report from the job — the tech can upload straight from a phone.</p>
+  <form method="post" action="/service-calls/{{ call['id'] }}/attachments" enctype="multipart/form-data" class="form-grid">
+    <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+    <label>Type
+      <select name="kind">
+        {% for k, label in attachment_kinds.items() %}
+        <option value="{{ k }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Caption / Notes (optional)<input type="text" name="caption"></label>
+    <label class="span2">File(s) <span class="muted">(photos, PDFs, docs — you can select more than one)</span>
+      <input type="file" name="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.heic">
+    </label>
+    <div class="span2"><button type="submit" class="btn primary">Upload</button></div>
+  </form>
+
+  {% if attachments %}
+  <div class="attachment-grid">
+    {% for a in attachments %}
+    <div class="attachment-card">
+      {% if a['content_type'] and a['content_type'].startswith('image/') %}
+      <a href="/service-calls/{{ call['id'] }}/attachments/{{ a['id'] }}/file" target="_blank">
+        <img src="/service-calls/{{ call['id'] }}/attachments/{{ a['id'] }}/file" alt="{{ a['filename'] or 'photo' }}">
+      </a>
+      {% else %}
+      <a href="/service-calls/{{ call['id'] }}/attachments/{{ a['id'] }}/file" class="file-icon">📄</a>
+      {% endif %}
+      <span class="badge badge-info">{{ attachment_kinds.get(a['kind'], a['kind']) }}</span>
+      {% if a['caption'] %}<div class="att-cap">{{ a['caption'] }}</div>{% endif %}
+      <div class="att-meta">{{ a['filename'] or '—' }}<br>{{ a['uploaded_by_name'] or '—' }} · {{ a['uploaded_at'][:10] if a['uploaded_at'] else '' }}</div>
+      <form method="post" action="/service-calls/{{ call['id'] }}/attachments/{{ a['id'] }}/delete"
+            onsubmit="return confirm('Delete this attachment?');">
+        <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+        <button type="submit" class="btn danger small">Delete</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">No attachments yet.</p>
   {% endif %}
 </div>
 

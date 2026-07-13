@@ -83,7 +83,7 @@
         <td>{% if c['site_id'] %}<a href="/sites/{{ c['site_id'] }}">{{ c['client_name'] }} — {{ c['site_name'] }}</a>{% else %}{{ c['customer_name'] or '—' }}{% endif %}</td>
         <td>{{ c['description'][:60] }}{% if c['description']|length > 60 %}…{% endif %}</td>
         <td>{{ c['assigned_to_name'] or '—' }}</td>
-        <td><span class="badge {{ 'badge-warn' if c['status']=='In Progress' else '' }}">{{ c['status'] }}</span></td>
+        <td><span class="badge {{ 'badge-pass' if c['status']=='Completed' else ('badge-warn' if c['status'] in ['In Progress', 'Completed - Repairs Required', 'Completed - Return Trip Required'] else '') }}">{{ c['status'] }}</span></td>
         <td><a href="/service-calls/{{ c['id'] }}">View</a> · <a href="/service-calls/{{ c['id'] }}/pdf" target="_blank">PDF</a></td>
       </tr>
     {% endfor %}
