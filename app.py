@@ -167,12 +167,14 @@ class DashboardHandler(BaseHandler):
         upcoming_calls = db.upcoming_service_calls(days=14)
         followup_calls = db.list_followup_calls()
         open_repairs = db.list_repairs(status="Open", limit=15)
+        current_calls, completed_calls = db.dashboard_calls_grouped(limit=25)
         self.render_tpl("dashboard.html", overdue=overdue, due_soon=due_soon,
                          counts=counts, recent=recent, type_cfg=INSPECTION_TYPES,
                          upcoming_calls=upcoming_calls, sites=db.list_sites(),
                          techs=db.list_users(), call_types=CALL_TYPES,
                          clients=db.list_clients(),
                          followup_calls=followup_calls, open_repairs=open_repairs,
+                         current_calls=current_calls, completed_calls=completed_calls,
                          suggested_wo=db.next_service_call_wo_number())
 
 
@@ -229,6 +231,164 @@ class UserPasswordResetHandler(BaseHandler):
         db.set_user_password(int(user_id), auth.hash_password(password))
         self.render_tpl("users.html", users=db.list_users(), error=None,
                          reset_ok=True)
+
+
+# ----------------------------------------------------------- profile ------
+
+class ProfileHandler(BaseHandler):
+    """Each user's own profile page — their contact info, plus a personal
+    view of the calls assigned to them and the inspections they've logged."""
+
+    @require_login
+    def get(self):
+        uid = self.current_user["id"]
+        my_calls = db.list_service_calls(assigned_to=uid, limit=200)
+        my_current_calls = [c for c in my_calls if c["status"] not in ("Completed", "Cancelled")]
+        my_completed_calls = [c for c in my_calls if c["status"] == "Completed"]
+        my_inspections = db.list_inspections(inspector_id=uid, limit=25)
+        my_expense_total = db.sum_expenses(user_id=uid)
+        self.render_tpl("profile.html", profile_user=self.current_user,
+                         my_current_calls=my_current_calls, my_completed_calls=my_completed_calls,
+                         my_inspections=my_inspections, type_cfg=INSPECTION_TYPES,
+                         my_expense_total=my_expense_total, error=None, profile_saved=False)
+
+
+class ProfileEditHandler(BaseHandler):
+    @require_login
+    def post(self):
+        uid = self.current_user["id"]
+        name = self.get_body_argument("name", "").strip()
+        email = self.get_body_argument("email", "").strip()
+        phone = self.get_body_argument("phone", "")
+        cert_number = self.get_body_argument("cert_number", "")
+        if not name or not email:
+            self.redirect("/profile")
+            return
+        try:
+            db.update_user_profile(uid, name, phone, cert_number, email)
+        except Exception as e:
+            uid = self.current_user["id"]
+            my_calls = db.list_service_calls(assigned_to=uid, limit=200)
+            self.render_tpl(
+                "profile.html", profile_user=self.current_user,
+                my_current_calls=[c for c in my_calls if c["status"] not in ("Completed", "Cancelled")],
+                my_completed_calls=[c for c in my_calls if c["status"] == "Completed"],
+                my_inspections=db.list_inspections(inspector_id=uid, limit=25), type_cfg=INSPECTION_TYPES,
+                my_expense_total=db.sum_expenses(user_id=uid),
+                error=f"Could not save changes: {e}", profile_saved=False,
+            )
+            return
+        self.redirect("/profile")
+
+
+class ProfileChangePasswordHandler(BaseHandler):
+    @require_login
+    def post(self):
+        current_password = self.get_body_argument("current_password", "")
+        new_password = self.get_body_argument("new_password", "")
+        uid = self.current_user["id"]
+        my_calls = db.list_service_calls(assigned_to=uid, limit=200)
+        common_kwargs = dict(
+            profile_user=self.current_user,
+            my_current_calls=[c for c in my_calls if c["status"] not in ("Completed", "Cancelled")],
+            my_completed_calls=[c for c in my_calls if c["status"] == "Completed"],
+            my_inspections=db.list_inspections(inspector_id=uid, limit=25), type_cfg=INSPECTION_TYPES,
+            my_expense_total=db.sum_expenses(user_id=uid),
+        )
+        if not auth.verify_password(current_password, self.current_user["password_hash"]):
+            self.render_tpl("profile.html", error="Current password is incorrect.",
+                             profile_saved=False, **common_kwargs)
+            return
+        if len(new_password) < 6:
+            self.render_tpl("profile.html", error="New password must be at least 6 characters.",
+                             profile_saved=False, **common_kwargs)
+            return
+        db.set_user_password(uid, auth.hash_password(new_password))
+        self.render_tpl("profile.html", error=None, profile_saved=True, **common_kwargs)
+
+
+# ------------------------------------------------------------ expenses ----
+# Standalone spending log, scoped to the submitting user (not attached to
+# any service call) — amount, category, vendor, plus an optional receipt
+# photo/file.
+
+class ExpensesHandler(BaseHandler):
+    @require_login
+    def get(self):
+        is_admin = self.current_user["role"] == "admin"
+        view_user_id = self.current_user["id"]
+        view_all = False
+        if is_admin:
+            requested = self.get_argument("user_id", "")
+            if requested == "all":
+                view_all = True
+            elif requested:
+                view_user_id = int(requested)
+        expenses = db.list_expenses(user_id=None if view_all else view_user_id)
+        total = db.sum_expenses(user_id=None if view_all else view_user_id)
+        self.render_tpl("expenses.html", expenses=expenses, total=total,
+                         categories=db.EXPENSE_CATEGORIES, is_admin=is_admin,
+                         users=db.list_users() if is_admin else [],
+                         view_user_id=view_user_id, view_all=view_all, error=None)
+
+    @require_login
+    def post(self):
+        expense_date = self.get_body_argument("expense_date", "").strip()
+        amount_raw = self.get_body_argument("amount", "").strip()
+        category = self.get_body_argument("category", "Other")
+        vendor = self.get_body_argument("vendor", "")
+        notes = self.get_body_argument("notes", "")
+        if category not in db.EXPENSE_CATEGORIES:
+            category = "Other"
+        try:
+            amount = float(amount_raw)
+        except ValueError:
+            amount = None
+        if not expense_date or amount is None:
+            self.render_tpl("expenses.html", expenses=db.list_expenses(user_id=self.current_user["id"]),
+                             total=db.sum_expenses(user_id=self.current_user["id"]),
+                             categories=db.EXPENSE_CATEGORIES, is_admin=self.current_user["role"] == "admin",
+                             users=db.list_users() if self.current_user["role"] == "admin" else [],
+                             view_user_id=self.current_user["id"], view_all=False,
+                             error="Date and a valid amount are required.")
+            return
+        receipt_filename = receipt_content_type = receipt_data = None
+        files = self.request.files.get("receipt", [])
+        if files:
+            f = files[0]
+            if len(f["body"]) <= MAX_ATTACHMENT_SIZE:
+                receipt_filename = f["filename"]
+                receipt_content_type = f["content_type"] or "application/octet-stream"
+                receipt_data = f["body"]
+        db.create_expense(self.current_user["id"], expense_date, amount, category, vendor, notes,
+                           receipt_filename, receipt_content_type, receipt_data)
+        self.redirect("/expenses")
+
+
+class ExpenseReceiptFileHandler(BaseHandler):
+    @require_login
+    def get(self, expense_id):
+        exp = db.get_expense(int(expense_id))
+        if not exp or not exp["receipt_data"]:
+            raise tornado.web.HTTPError(404)
+        if exp["user_id"] != self.current_user["id"] and self.current_user["role"] != "admin":
+            raise tornado.web.HTTPError(403)
+        self.set_header("Content-Type", exp["receipt_content_type"] or "application/octet-stream")
+        if not (exp["receipt_content_type"] or "").startswith("image/"):
+            self.set_header("Content-Disposition", f'attachment; filename="{exp["receipt_filename"] or "receipt"}"')
+        self.write(exp["receipt_data"])
+
+
+class ExpenseDeleteHandler(BaseHandler):
+    @require_login
+    def post(self, expense_id):
+        exp = db.get_expense(int(expense_id))
+        if not exp:
+            raise tornado.web.HTTPError(404)
+        if exp["user_id"] != self.current_user["id"] and self.current_user["role"] != "admin":
+            raise tornado.web.HTTPError(403)
+        db.delete_expense(int(expense_id))
+        self.redirect("/expenses")
 
 
 # ------------------------------------------------------------ clients -----
@@ -1368,6 +1528,12 @@ def make_app():
         (r"/", DashboardHandler),
         (r"/users", UsersHandler),
         (r"/users/reset-password", UserPasswordResetHandler),
+        (r"/profile", ProfileHandler),
+        (r"/profile/edit", ProfileEditHandler),
+        (r"/profile/change-password", ProfileChangePasswordHandler),
+        (r"/expenses", ExpensesHandler),
+        (r"/expenses/(\d+)/receipt", ExpenseReceiptFileHandler),
+        (r"/expenses/(\d+)/delete", ExpenseDeleteHandler),
         (r"/clients", ClientsHandler),
         (r"/clients/(\d+)", ClientDetailHandler),
         (r"/clients/(\d+)/edit", ClientEditHandler),

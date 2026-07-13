@@ -191,6 +191,20 @@ CREATE TABLE IF NOT EXISTS asset_attachments (
     uploaded_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS expenses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expense_date TEXT NOT NULL,
+    amount REAL NOT NULL,
+    category TEXT NOT NULL DEFAULT 'Other',   -- Materials / Fuel / Tools / Meals / Other
+    vendor TEXT,
+    notes TEXT,
+    receipt_filename TEXT,
+    receipt_content_type TEXT,
+    receipt_data BLOB,
+    created_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_sites_client ON sites(client_id);
 CREATE INDEX IF NOT EXISTS idx_assets_site ON assets(site_id);
 CREATE INDEX IF NOT EXISTS idx_schedules_due ON schedules(next_due_date);
@@ -204,6 +218,8 @@ CREATE INDEX IF NOT EXISTS idx_repairs_status ON repairs(status);
 CREATE INDEX IF NOT EXISTS idx_repairs_call ON repairs(service_call_id);
 CREATE INDEX IF NOT EXISTS idx_insp_attachments_insp ON inspection_attachments(inspection_id);
 CREATE INDEX IF NOT EXISTS idx_asset_attachments_asset ON asset_attachments(asset_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_user ON expenses(user_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(expense_date);
 """
 
 ATTACHMENT_KINDS = {
@@ -817,7 +833,8 @@ def get_inspection(inspection_id):
     return row
 
 
-def list_inspections(site_id=None, asset_id=None, inspection_type=None, service_call_id=None, limit=100):
+def list_inspections(site_id=None, asset_id=None, inspection_type=None, service_call_id=None,
+                      inspector_id=None, limit=100):
     conn = get_conn()
     query = """
         SELECT inspections.*, sites.name AS site_name, clients.name AS client_name,
@@ -841,6 +858,9 @@ def list_inspections(site_id=None, asset_id=None, inspection_type=None, service_
     if service_call_id:
         conditions.append("inspections.service_call_id = ?")
         params.append(service_call_id)
+    if inspector_id:
+        conditions.append("inspections.inspector_id = ?")
+        params.append(inspector_id)
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
     query += " ORDER BY inspections.inspection_date DESC, inspections.id DESC LIMIT ?"
@@ -987,7 +1007,7 @@ def get_service_call(call_id):
     return row
 
 
-def list_service_calls(status=None, upcoming_only=False, site_id=None, limit=200):
+def list_service_calls(status=None, upcoming_only=False, site_id=None, assigned_to=None, limit=200):
     conn = get_conn()
     query = SERVICE_CALL_JOIN
     conditions, params = [], []
@@ -999,6 +1019,9 @@ def list_service_calls(status=None, upcoming_only=False, site_id=None, limit=200
     if site_id:
         conditions.append("service_calls.site_id = ?")
         params.append(site_id)
+    if assigned_to:
+        conditions.append("service_calls.assigned_to = ?")
+        params.append(assigned_to)
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
     query += " ORDER BY service_calls.scheduled_date ASC, service_calls.scheduled_time ASC LIMIT ?"
@@ -1006,6 +1029,30 @@ def list_service_calls(status=None, upcoming_only=False, site_id=None, limit=200
     rows = conn.execute(query, params).fetchall()
     conn.close()
     return rows
+
+
+def dashboard_calls_grouped(limit=25):
+    """Current (not Completed/Cancelled) and Completed service calls for the
+    shared dashboard tabs — current soonest-first, completed most-recent-first."""
+    conn = get_conn()
+    current = conn.execute(
+        SERVICE_CALL_JOIN + """
+        WHERE service_calls.status NOT IN ('Completed', 'Cancelled')
+        ORDER BY service_calls.scheduled_date ASC, service_calls.scheduled_time ASC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    completed = conn.execute(
+        SERVICE_CALL_JOIN + """
+        WHERE service_calls.status = 'Completed'
+        ORDER BY service_calls.updated_at DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    conn.close()
+    return current, completed
 
 
 FOLLOWUP_STATUSES = ("Completed - Repairs Required", "Completed - Return Trip Required")
@@ -1387,5 +1434,98 @@ def get_asset_attachment_file(attachment_id):
 def delete_asset_attachment(attachment_id):
     conn = get_conn()
     conn.execute("DELETE FROM asset_attachments WHERE id = ?", (attachment_id,))
+    conn.commit()
+    conn.close()
+
+
+# ---------- Expenses (receipts / spending tracking, per user) ----------
+
+EXPENSE_CATEGORIES = ["Materials", "Fuel", "Tools & Equipment", "Meals", "Other"]
+
+
+def create_expense(user_id, expense_date, amount, category="Other", vendor="", notes="",
+                    receipt_filename=None, receipt_content_type=None, receipt_data=None):
+    conn = get_conn()
+    cur = conn.execute(
+        """
+        INSERT INTO expenses
+        (user_id, expense_date, amount, category, vendor, notes,
+         receipt_filename, receipt_content_type, receipt_data, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (user_id, expense_date, amount, category, vendor, notes,
+         receipt_filename, receipt_content_type, receipt_data, now_iso()),
+    )
+    conn.commit()
+    eid = cur.lastrowid
+    conn.close()
+    return eid
+
+
+def list_expenses(user_id=None, limit=200):
+    conn = get_conn()
+    query = """
+        SELECT expenses.id, expenses.user_id, expenses.expense_date, expenses.amount,
+               expenses.category, expenses.vendor, expenses.notes, expenses.receipt_filename,
+               expenses.receipt_content_type, expenses.created_at,
+               (expenses.receipt_data IS NOT NULL) AS has_receipt,
+               users.name AS user_name
+        FROM expenses
+        LEFT JOIN users ON users.id = expenses.user_id
+    """
+    conditions, params = [], []
+    if user_id:
+        conditions.append("expenses.user_id = ?")
+        params.append(user_id)
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY expenses.expense_date DESC, expenses.id DESC LIMIT ?"
+    params.append(limit)
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+    return rows
+
+
+def get_expense(expense_id):
+    conn = get_conn()
+    row = conn.execute(
+        """
+        SELECT expenses.*, users.name AS user_name
+        FROM expenses LEFT JOIN users ON users.id = expenses.user_id
+        WHERE expenses.id = ?
+        """,
+        (expense_id,),
+    ).fetchone()
+    conn.close()
+    return row
+
+
+def delete_expense(expense_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
+    conn.commit()
+    conn.close()
+
+
+def sum_expenses(user_id=None):
+    conn = get_conn()
+    query = "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses"
+    params = []
+    if user_id:
+        query += " WHERE user_id = ?"
+        params.append(user_id)
+    total = conn.execute(query, params).fetchone()["total"]
+    conn.close()
+    return total
+
+
+# ---------- User profile ----------
+
+def update_user_profile(user_id, name, phone, cert_number, email):
+    conn = get_conn()
+    conn.execute(
+        "UPDATE users SET name = ?, phone = ?, cert_number = ?, email = ? WHERE id = ?",
+        (name, phone, cert_number, email.lower().strip(), user_id),
+    )
     conn.commit()
     conn.close()
