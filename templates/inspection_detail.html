@@ -112,4 +112,42 @@
   {% endfor %}
   </table>
 </div>
+
+<div class="panel">
+  <h2>Photos / Deficiency Documentation</h2>
+  <p class="muted" style="margin-top:-6px">Attach photos of any deficiencies found during this inspection — straight from a phone.</p>
+  <form method="post" action="/inspections/{{ inspection['id'] }}/attachments" enctype="multipart/form-data" class="form-grid">
+    <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+    <label>Caption / Notes (optional)<input type="text" name="caption"></label>
+    <label class="span2">Photo(s) <span class="muted">(you can select more than one)</span>
+      <input type="file" name="file" multiple accept="image/*,.pdf,.heic">
+    </label>
+    <div class="span2"><button type="submit" class="btn primary">Upload</button></div>
+  </form>
+
+  {% if attachments %}
+  <div class="attachment-grid">
+    {% for a in attachments %}
+    <div class="attachment-card">
+      {% if a['content_type'] and a['content_type'].startswith('image/') %}
+      <a href="/inspections/{{ inspection['id'] }}/attachments/{{ a['id'] }}/file" target="_blank">
+        <img src="/inspections/{{ inspection['id'] }}/attachments/{{ a['id'] }}/file" alt="{{ a['filename'] or 'photo' }}">
+      </a>
+      {% else %}
+      <a href="/inspections/{{ inspection['id'] }}/attachments/{{ a['id'] }}/file" class="file-icon">📄</a>
+      {% endif %}
+      {% if a['caption'] %}<div class="att-cap">{{ a['caption'] }}</div>{% endif %}
+      <div class="att-meta">{{ a['filename'] or '—' }}<br>{{ a['uploaded_by_name'] or '—' }} · {{ a['uploaded_at'][:10] if a['uploaded_at'] else '' }}</div>
+      <form method="post" action="/inspections/{{ inspection['id'] }}/attachments/{{ a['id'] }}/delete"
+            onsubmit="return confirm('Delete this photo?');">
+        <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+        <button type="submit" class="btn danger small">Delete</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">No photos yet.</p>
+  {% endif %}
+</div>
 {% endblock %}

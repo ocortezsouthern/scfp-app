@@ -7,19 +7,13 @@
     {{ f.label }}
     {% if f.type == 'textarea' %}
       <textarea name="{{ f.key }}">{{ val }}</textarea>
-    {% elif f.type == 'yn' %}
-      <select name="{{ f.key }}">
-        <option value="">—</option>
-        <option {% if val=='Yes' %}selected{% endif %}>Yes</option>
-        <option {% if val=='No' %}selected{% endif %}>No</option>
-      </select>
-    {% elif f.type == 'ynna' %}
-      <select name="{{ f.key }}">
-        <option value="">—</option>
-        <option {% if val=='Yes' %}selected{% endif %}>Yes</option>
-        <option {% if val=='No' %}selected{% endif %}>No</option>
-        <option {% if val=='N/A' %}selected{% endif %}>N/A</option>
-      </select>
+    {% elif f.type == 'yn' or f.type == 'ynna' %}
+      <input type="hidden" name="{{ f.key }}" value="{{ val }}" class="yn-input">
+      <div class="yn-toggle" data-options="{{ 'Yes,No,N/A' if f.type == 'ynna' else 'Yes,No' }}">
+        <button type="button" class="yn-btn {{ 'active' if val=='Yes' else '' }}" data-value="Yes">Yes</button>
+        <button type="button" class="yn-btn {{ 'active' if val=='No' else '' }}" data-value="No">No</button>
+        {% if f.type == 'ynna' %}<button type="button" class="yn-btn {{ 'active' if val=='N/A' else '' }}" data-value="N/A">N/A</button>{% endif %}
+      </div>
     {% elif f.type == 'select' %}
       <select name="{{ f.key }}">
         {% for opt in f.options %}<option value="{{ opt }}" {% if opt==val %}selected{% endif %}>{{ opt if opt else '—' }}</option>{% endfor %}
@@ -175,6 +169,22 @@
     <button type="submit" class="btn primary large">{% if edit_mode %}Save Changes{% else %}Save Inspection{% endif %}</button>
   </div>
 </form>
+
+<script>
+  document.querySelectorAll('.yn-toggle').forEach(function (group) {
+    var input = group.previousElementSibling;
+    if (!input || !input.classList.contains('yn-input')) { return; }
+    group.querySelectorAll('.yn-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var already = btn.classList.contains('active');
+        group.querySelectorAll('.yn-btn').forEach(function (b) { b.classList.remove('active'); });
+        input.value = already ? '' : btn.getAttribute('data-value');
+        if (!already) { btn.classList.add('active'); }
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    });
+  });
+</script>
 
 {% if not edit_mode %}
 <script>

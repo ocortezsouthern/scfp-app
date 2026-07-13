@@ -106,4 +106,42 @@
   </table>
 </div>
 </section>
+
+<section class="panel">
+  <h2>Photos</h2>
+  <p class="muted" style="margin-top:-6px">Photos of this equipment — nameplate, install condition, damage, etc.</p>
+  <form method="post" action="/assets/{{ asset['id'] }}/attachments" enctype="multipart/form-data" class="form-grid">
+    <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+    <label>Caption / Notes (optional)<input type="text" name="caption"></label>
+    <label class="span2">Photo(s) <span class="muted">(you can select more than one)</span>
+      <input type="file" name="file" multiple accept="image/*,.pdf,.heic">
+    </label>
+    <div class="span2"><button type="submit" class="btn primary">Upload</button></div>
+  </form>
+
+  {% if attachments %}
+  <div class="attachment-grid">
+    {% for a in attachments %}
+    <div class="attachment-card">
+      {% if a['content_type'] and a['content_type'].startswith('image/') %}
+      <a href="/assets/{{ asset['id'] }}/attachments/{{ a['id'] }}/file" target="_blank">
+        <img src="/assets/{{ asset['id'] }}/attachments/{{ a['id'] }}/file" alt="{{ a['filename'] or 'photo' }}">
+      </a>
+      {% else %}
+      <a href="/assets/{{ asset['id'] }}/attachments/{{ a['id'] }}/file" class="file-icon">📄</a>
+      {% endif %}
+      {% if a['caption'] %}<div class="att-cap">{{ a['caption'] }}</div>{% endif %}
+      <div class="att-meta">{{ a['filename'] or '—' }}<br>{{ a['uploaded_by_name'] or '—' }} · {{ a['uploaded_at'][:10] if a['uploaded_at'] else '' }}</div>
+      <form method="post" action="/assets/{{ asset['id'] }}/attachments/{{ a['id'] }}/delete"
+            onsubmit="return confirm('Delete this photo?');">
+        <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
+        <button type="submit" class="btn danger small">Delete</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">No photos yet.</p>
+  {% endif %}
+</section>
 {% endblock %}

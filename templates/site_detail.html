@@ -101,7 +101,7 @@
 <table class="data-table">
       <thead><tr><th>Label</th><th>Type</th><th>Serial #</th><th>Status</th><th></th></tr></thead>
       <tbody>
-      {% for a in assets %}
+      {% for a in equipment_assets %}
         <tr class="{{ 'muted' if a['status'] == 'inactive' else '' }}">
           <td><a href="/assets/{{ a['id'] }}">{{ a['label'] }}</a></td>
           <td>{{ asset_type_labels.get(a['asset_type'], a['asset_type']) }}</td>
@@ -111,6 +111,29 @@
         </tr>
       {% else %}
         <tr><td colspan="5" class="muted">No equipment logged yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+</div>
+  </section>
+
+  <section class="panel">
+    <h2>Devices</h2>
+    <p class="muted" style="margin-top:-6px">Smaller devices — waterflow switches, control valves, etc.</p>
+    <div class="table-scroll">
+<table class="data-table">
+      <thead><tr><th>Label</th><th>Type</th><th>Serial #</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      {% for a in device_assets %}
+        <tr class="{{ 'muted' if a['status'] == 'inactive' else '' }}">
+          <td><a href="/assets/{{ a['id'] }}">{{ a['label'] }}</a></td>
+          <td>{{ asset_type_labels.get(a['asset_type'], a['asset_type']) }}</td>
+          <td>{{ a['serial_number'] or '—' }}</td>
+          <td><span class="badge {{ 'badge-fail' if a['status']=='inactive' else 'badge-pass' }}">{{ 'Out of Service' if a['status']=='inactive' else 'Active' }}</span></td>
+          <td><a href="/assets/{{ a['id'] }}">View</a></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="muted">No devices logged yet.</td></tr>
       {% endfor %}
       </tbody>
     </table>
