@@ -207,6 +207,30 @@ class UsersHandler(BaseHandler):
         self.redirect("/users")
 
 
+class UserPasswordResetHandler(BaseHandler):
+    """Admin-only: sets a new password for a team member who's locked out
+    (e.g. can't log in on a new device) — passwords are hashed with bcrypt
+    and can never be viewed or recovered, only reset."""
+
+    @require_login
+    def post(self):
+        if self.current_user["role"] != "admin":
+            self.set_status(403)
+            self.write("Admins only")
+            return
+        user_id = self.get_body_argument("user_id", "")
+        password = self.get_body_argument("password", "")
+        if not user_id or len(password) < 6:
+            self.render_tpl("users.html", users=db.list_users(),
+                             error="Pick a team member and enter a password of at least 6 characters.")
+            return
+        if not db.get_user(int(user_id)):
+            raise tornado.web.HTTPError(404)
+        db.set_user_password(int(user_id), auth.hash_password(password))
+        self.render_tpl("users.html", users=db.list_users(), error=None,
+                         reset_ok=True)
+
+
 # ------------------------------------------------------------ clients -----
 
 class ClientsHandler(BaseHandler):
@@ -1281,6 +1305,7 @@ def make_app():
         (r"/logout", LogoutHandler),
         (r"/", DashboardHandler),
         (r"/users", UsersHandler),
+        (r"/users/reset-password", UserPasswordResetHandler),
         (r"/clients", ClientsHandler),
         (r"/clients/(\d+)", ClientDetailHandler),
         (r"/clients/(\d+)/edit", ClientEditHandler),

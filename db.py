@@ -307,6 +307,13 @@ def list_users():
     return rows
 
 
+def set_user_password(user_id, password_hash):
+    conn = get_conn()
+    conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (password_hash, user_id))
+    conn.commit()
+    conn.close()
+
+
 def count_users():
     conn = get_conn()
     n = conn.execute("SELECT COUNT(*) c FROM users").fetchone()["c"]
