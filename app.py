@@ -10,6 +10,7 @@ First run walks you through creating the first admin account at /setup.
 import os
 import re
 import json
+import base64
 import datetime
 import argparse
 
@@ -590,6 +591,18 @@ class ServiceCallDetailHandler(BaseHandler):
 MAX_ATTACHMENT_SIZE = 15 * 1024 * 1024  # 15MB per file — generous for phone photos, PDFs, etc.
 
 
+def decode_signature_png(data_url):
+    """Signature pads submit a base64 PNG data URL (data:image/png;base64,...).
+    Returns raw PNG bytes, or None if nothing was signed / the value is blank
+    or malformed."""
+    if not data_url or "," not in data_url:
+        return None
+    try:
+        return base64.b64decode(data_url.split(",", 1)[1])
+    except Exception:
+        return None
+
+
 class ServiceCallAttachmentsHandler(BaseHandler):
     @require_login
     def post(self, call_id):
@@ -791,6 +804,35 @@ class ServiceCallOnsiteHandler(BaseHandler):
             work_performed=self.get_body_argument("work_performed", "").strip(),
         )
         self.redirect(f"/service-calls/{call_id}")
+
+
+class ServiceCallSignoffHandler(BaseHandler):
+    """Manager name/signature/date sign-off, captured on-site from the app
+    instead of the blank fill-in line on the printed work order."""
+
+    @require_login
+    def post(self, call_id):
+        call_id = int(call_id)
+        if not db.get_service_call(call_id):
+            raise tornado.web.HTTPError(404)
+        signature_bytes = decode_signature_png(self.get_body_argument("signature_data", ""))
+        db.set_service_call_signoff(
+            call_id,
+            manager_name=self.get_body_argument("manager_name", "").strip(),
+            manager_sign_date=self.get_body_argument("manager_sign_date", "").strip(),
+            manager_signature=signature_bytes,
+        )
+        self.redirect(f"/service-calls/{call_id}")
+
+
+class ServiceCallSignatureImageHandler(BaseHandler):
+    @require_login
+    def get(self, call_id):
+        sig = db.get_service_call_signature(int(call_id))
+        if not sig:
+            raise tornado.web.HTTPError(404)
+        self.set_header("Content-Type", "image/png")
+        self.write(sig)
 
 
 class ServiceCallStatusHandler(BaseHandler):
@@ -1143,6 +1185,35 @@ class InspectionDeleteHandler(BaseHandler):
         self.redirect(f"/sites/{site_id}")
 
 
+class InspectionSignoffHandler(BaseHandler):
+    """Manager name/signature/date sign-off, captured on-site from the app
+    instead of the blank fill-in line on the printed inspection report."""
+
+    @require_login
+    def post(self, inspection_id):
+        inspection_id = int(inspection_id)
+        if not db.get_inspection(inspection_id):
+            raise tornado.web.HTTPError(404)
+        signature_bytes = decode_signature_png(self.get_body_argument("signature_data", ""))
+        db.set_inspection_signoff(
+            inspection_id,
+            manager_name=self.get_body_argument("manager_name", "").strip(),
+            manager_sign_date=self.get_body_argument("manager_sign_date", "").strip(),
+            manager_signature=signature_bytes,
+        )
+        self.redirect(f"/inspections/{inspection_id}")
+
+
+class InspectionSignatureImageHandler(BaseHandler):
+    @require_login
+    def get(self, inspection_id):
+        sig = db.get_inspection_signature(int(inspection_id))
+        if not sig:
+            raise tornado.web.HTTPError(404)
+        self.set_header("Content-Type", "image/png")
+        self.write(sig)
+
+
 class InspectionPdfHandler(BaseHandler):
     @require_login
     def get(self, inspection_id):
@@ -1230,6 +1301,8 @@ def make_app():
         (r"/service-calls/(\d+)", ServiceCallDetailHandler),
         (r"/service-calls/(\d+)/edit", ServiceCallEditHandler),
         (r"/service-calls/(\d+)/onsite", ServiceCallOnsiteHandler),
+        (r"/service-calls/(\d+)/signoff", ServiceCallSignoffHandler),
+        (r"/service-calls/(\d+)/signature", ServiceCallSignatureImageHandler),
         (r"/service-calls/(\d+)/pdf", ServiceCallPdfHandler),
         (r"/service-calls/(\d+)/attachments", ServiceCallAttachmentsHandler),
         (r"/service-calls/(\d+)/attachments/(\d+)/file", ServiceCallAttachmentFileHandler),
@@ -1246,6 +1319,8 @@ def make_app():
         (r"/inspections/(\d+)", InspectionDetailHandler),
         (r"/inspections/(\d+)/edit", InspectionEditHandler),
         (r"/inspections/(\d+)/delete", InspectionDeleteHandler),
+        (r"/inspections/(\d+)/signoff", InspectionSignoffHandler),
+        (r"/inspections/(\d+)/signature", InspectionSignatureImageHandler),
         (r"/inspections/(\d+)/pdf", InspectionPdfHandler),
         (r"/inspections/(\d+)/attachments", InspectionAttachmentsHandler),
         (r"/inspections/(\d+)/attachments/(\d+)/file", InspectionAttachmentFileHandler),

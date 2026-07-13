@@ -100,7 +100,10 @@ CREATE TABLE IF NOT EXISTS inspections (
     created_by INTEGER REFERENCES users(id),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    service_call_id INTEGER REFERENCES service_calls(id)   -- set when this inspection was scheduled/started from a service call
+    service_call_id INTEGER REFERENCES service_calls(id),   -- set when this inspection was scheduled/started from a service call
+    manager_name TEXT,           -- on-site manager sign-off, captured from the app
+    manager_sign_date TEXT,
+    manager_signature BLOB       -- PNG bytes from the signature pad
 );
 
 CREATE TABLE IF NOT EXISTS service_calls (
@@ -121,6 +124,9 @@ CREATE TABLE IF NOT EXISTS service_calls (
     check_in_time TEXT,     -- on-site arrival time (HH:MM), filled in by the tech from the app
     check_out_time TEXT,    -- on-site departure time (HH:MM)
     work_performed TEXT,    -- description of work completed, filled in by the tech from the app
+    manager_name TEXT,      -- on-site manager sign-off, captured from the app
+    manager_sign_date TEXT,
+    manager_signature BLOB, -- PNG bytes from the signature pad
     created_by INTEGER REFERENCES users(id),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -228,6 +234,14 @@ def _migrate(conn):
         conn.execute("ALTER TABLE service_calls ADD COLUMN check_out_time TEXT")
     if not _column_exists(conn, "service_calls", "work_performed"):
         conn.execute("ALTER TABLE service_calls ADD COLUMN work_performed TEXT")
+    if not _column_exists(conn, "service_calls", "manager_name"):
+        conn.execute("ALTER TABLE service_calls ADD COLUMN manager_name TEXT")
+        conn.execute("ALTER TABLE service_calls ADD COLUMN manager_sign_date TEXT")
+        conn.execute("ALTER TABLE service_calls ADD COLUMN manager_signature BLOB")
+    if not _column_exists(conn, "inspections", "manager_name"):
+        conn.execute("ALTER TABLE inspections ADD COLUMN manager_name TEXT")
+        conn.execute("ALTER TABLE inspections ADD COLUMN manager_sign_date TEXT")
+        conn.execute("ALTER TABLE inspections ADD COLUMN manager_signature BLOB")
     conn.commit()
 
 
@@ -714,6 +728,26 @@ def update_inspection(inspection_id, inspection_date, overall_result, system_imp
     conn.close()
 
 
+def set_inspection_signoff(inspection_id, manager_name, manager_sign_date, manager_signature=None):
+    fields = ["manager_name = ?", "manager_sign_date = ?"]
+    params = [manager_name, manager_sign_date]
+    if manager_signature is not None:
+        fields.append("manager_signature = ?")
+        params.append(manager_signature)
+    params.append(inspection_id)
+    conn = get_conn()
+    conn.execute(f"UPDATE inspections SET {', '.join(fields)} WHERE id = ?", params)
+    conn.commit()
+    conn.close()
+
+
+def get_inspection_signature(inspection_id):
+    conn = get_conn()
+    row = conn.execute("SELECT manager_signature FROM inspections WHERE id = ?", (inspection_id,)).fetchone()
+    conn.close()
+    return row["manager_signature"] if row else None
+
+
 def get_inspection(inspection_id):
     conn = get_conn()
     row = conn.execute(
@@ -867,6 +901,23 @@ def update_service_call(call_id, **fields):
 
 def set_service_call_status(call_id, status):
     update_service_call(call_id, status=status)
+
+
+def set_service_call_signoff(call_id, manager_name, manager_sign_date, manager_signature=None):
+    """manager_signature is PNG bytes from the signature pad, or None to leave
+    whatever signature is already on file untouched (so re-saving just the
+    name/date doesn't wipe out a signature captured moments earlier)."""
+    fields = {"manager_name": manager_name, "manager_sign_date": manager_sign_date}
+    if manager_signature is not None:
+        fields["manager_signature"] = manager_signature
+    update_service_call(call_id, **fields)
+
+
+def get_service_call_signature(call_id):
+    conn = get_conn()
+    row = conn.execute("SELECT manager_signature FROM service_calls WHERE id = ?", (call_id,)).fetchone()
+    conn.close()
+    return row["manager_signature"] if row else None
 
 
 def get_service_call(call_id):

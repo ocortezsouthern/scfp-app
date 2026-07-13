@@ -15,8 +15,9 @@ from reportlab.lib import colors
 from reportlab.lib.units import inch
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether, Image
 )
+from reportlab.lib.utils import ImageReader
 from reportlab.lib.enums import TA_RIGHT
 
 from forms_config import get_type_config, CLOSING_SECTION
@@ -157,6 +158,21 @@ def _band_cell(label, lines, styles):
             Paragraph(value_html, styles["SCFPBandValue"])]
 
 
+def _signature_image(sig_bytes, max_width=2.4 * inch, max_height=0.65 * inch):
+    """Turns saved signature-pad PNG bytes into a reportlab Image flowable,
+    scaled down to fit the sign-off line while preserving aspect ratio.
+    Returns None if there's nothing to draw."""
+    if not sig_bytes:
+        return None
+    try:
+        reader = ImageReader(io.BytesIO(sig_bytes))
+        iw, ih = reader.getSize()
+        scale = min(max_width / iw, max_height / ih)
+        return Image(io.BytesIO(sig_bytes), width=iw * scale, height=ih * scale)
+    except Exception:
+        return None
+
+
 def generate_inspection_pdf(inspection_row, client_row, site_row, asset_row=None):
     """Returns PDF bytes for the given inspection."""
     styles = _styles()
@@ -246,13 +262,21 @@ def generate_inspection_pdf(inspection_row, client_row, site_row, asset_row=None
         story.append(grid)
 
     story.append(Spacer(1, 16))
-    sig_tbl = Table([
+    manager_name_text = f"Manager Name: {inspection_row['manager_name']}" if inspection_row["manager_name"] \
+        else "Manager Name: ______________________________"
+    manager_date_text = f"Date: {inspection_row['manager_sign_date']}" if inspection_row["manager_sign_date"] \
+        else "Date: ______________"
+    sig_image = _signature_image(inspection_row["manager_signature"])
+    sig_rows = [
         ["Technician's Signature: ___________________________", "Date: ______________"],
-        ["Manager's Signature: ______________________________", "Date: ______________"],
-    ], colWidths=[5 * inch, PAGE_WIDTH - 5 * inch])
+        [manager_name_text, ""],
+        [sig_image or "Manager's Signature: ______________________________", manager_date_text],
+    ]
+    sig_tbl = Table(sig_rows, colWidths=[5 * inch, PAGE_WIDTH - 5 * inch])
     sig_tbl.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 9),
         ("TOPPADDING", (0, 0), (-1, -1), 10),
+        ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
     ]))
     story.append(sig_tbl)
 
@@ -390,18 +414,25 @@ def generate_service_call_pdf(call):
     ]))
     story.append(yn_tbl)
 
-    # --- Sign-off ---
+    # --- Sign-off — uses the manager name/signature/date captured in the app
+    # when available, otherwise leaves blank fill-in lines ---
     story.append(Spacer(1, 14))
     story.append(_section_header("Sign-Off", styles))
     story.append(Spacer(1, 8))
-    sig_tbl = Table([
+    manager_name_text = f"Customer / Manager Name: {call['manager_name']}" if call["manager_name"] \
+        else "Customer / Manager Name: _________________________"
+    manager_date_text = f"Date: {call['manager_sign_date']}" if call["manager_sign_date"] else "Date: ______________"
+    sig_image = _signature_image(call["manager_signature"])
+    sig_rows = [
         ["Technician's Signature: ___________________________", "Date: ______________"],
-        ["Customer / Manager Name: _________________________", ""],
-        ["Customer / Manager Signature: _____________________", "Date: ______________"],
-    ], colWidths=[5 * inch, PAGE_WIDTH - 5 * inch])
+        [manager_name_text, ""],
+        [sig_image or "Customer / Manager Signature: _____________________", manager_date_text],
+    ]
+    sig_tbl = Table(sig_rows, colWidths=[5 * inch, PAGE_WIDTH - 5 * inch])
     sig_tbl.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 9),
         ("TOPPADDING", (0, 0), (-1, -1), 10),
+        ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
     ]))
     story.append(sig_tbl)
 
