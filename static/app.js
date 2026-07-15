@@ -134,6 +134,34 @@
         });
       }
     });
+
+    // Photo repeater — one file input + one caption input per row, used on
+    // the inspection form's Photos tab and on the saved inspection page's
+    // "Add more photos" panel. Each caption becomes that photo's entry in
+    // the printed report's Deficiency Report section, so every row keeps
+    // its file and caption paired: the server matches them up strictly by
+    // the order rows appear in the form.
+    function addPhotoRow(container) {
+      var rows = container.querySelector(".photo-rows");
+      var row = document.createElement("div");
+      row.className = "photo-row";
+      row.innerHTML =
+        "<input type=\"file\" name=\"photo_files\" accept=\"image/*,.heic,.pdf\" class=\"photo-file-input\">" +
+        "<input type=\"text\" name=\"photo_captions\" placeholder=\"Describe the deficiency shown in this photo\" class=\"photo-caption-input\">" +
+        "<button type=\"button\" class=\"btn small danger photo-remove-btn\" title=\"Remove this photo\">&times;</button>";
+      row.querySelector(".photo-remove-btn").addEventListener("click", function () {
+        row.remove();
+      });
+      rows.appendChild(row);
+    }
+
+    document.querySelectorAll(".photo-repeater").forEach(function (container) {
+      addPhotoRow(container);
+      var addBtn = container.querySelector(".add-photo-btn");
+      if (addBtn) {
+        addBtn.addEventListener("click", function () { addPhotoRow(container); });
+      }
+    });
   });
 
   // Generic Yes/No toggle wiring — shared by the inspection form and any
