@@ -173,7 +173,22 @@ def _signature_image(sig_bytes, max_width=2.4 * inch, max_height=0.65 * inch):
         return None
 
 
-def generate_inspection_pdf(inspection_row, client_row, site_row, asset_row=None):
+def _thumbnail_image(file_bytes, content_type, max_size=1.3 * inch):
+    """Small square-ish thumbnail for the Deficiency Report section. Only
+    works for image attachments — non-image files (e.g. a stray PDF) get no
+    preview, just their caption. Returns None if there's nothing to draw."""
+    if not file_bytes or not (content_type or "").startswith("image/"):
+        return None
+    try:
+        reader = ImageReader(io.BytesIO(file_bytes))
+        iw, ih = reader.getSize()
+        scale = min(max_size / iw, max_size / ih)
+        return Image(io.BytesIO(file_bytes), width=iw * scale, height=ih * scale)
+    except Exception:
+        return None
+
+
+def generate_inspection_pdf(inspection_row, client_row, site_row, asset_row=None, attachments=None):
     """Returns PDF bytes for the given inspection."""
     styles = _styles()
     itype = inspection_row["inspection_type"]
@@ -260,6 +275,29 @@ def generate_inspection_pdf(inspection_row, client_row, site_row, asset_row=None
     grid = _kv_grid(CLOSING_SECTION["fields"], data, styles)
     if grid:
         story.append(grid)
+
+    # --- Deficiency Report — one row per uploaded photo, thumbnail + the
+    # description entered for it, so a phone photo with a one-line caption
+    # becomes a documented finding on the printed report ---
+    if attachments:
+        story.append(Spacer(1, 14))
+        story.append(_section_header("Deficiency Report / Photo Documentation", styles))
+        story.append(Spacer(1, 6))
+        for idx, att in enumerate(attachments, start=1):
+            thumb = _thumbnail_image(att["file_data"], att["content_type"])
+            caption_text = att["caption"] or "No description provided"
+            item_tbl = Table(
+                [[thumb or Paragraph("[No preview available]", styles["SCFPSub"]),
+                  Paragraph(f"<b>{idx}.</b> {caption_text}", styles["SCFPValue"])]],
+                colWidths=[1.4 * inch, PAGE_WIDTH - 1.4 * inch],
+            )
+            item_tbl.setStyle(TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("LINEBELOW", (0, 0), (-1, -1), 0.4, RULE_GRAY),
+            ]))
+            story.append(KeepTogether([item_tbl]))
 
     story.append(Spacer(1, 16))
     manager_name_text = f"Manager Name: {inspection_row['manager_name']}" if inspection_row["manager_name"] \

@@ -787,6 +787,35 @@ def decode_signature_png(data_url):
         return None
 
 
+def save_photo_uploads(handler, inspection_id):
+    """Reads the repeated photo_files (file inputs) + photo_captions (parallel
+    text inputs) submitted by the Photos tab/repeater component — one file
+    input and one caption input per row the user added, in the order they
+    appear in the form — and creates one inspection_attachment per pair.
+    Each photo's caption is what populates the Deficiency Report section of
+    the printed inspection PDF, so it's worth keeping file/caption order
+    reliable: browsers serialize multipart forms in document order, and
+    since every row contributes exactly one of each field in that same
+    order, the Nth file always lines up with the Nth caption.
+    Returns (saved_count, skipped_count)."""
+    files = handler.request.files.get("photo_files", [])
+    captions = handler.get_body_arguments("photo_captions")
+    saved = skipped = 0
+    for i, f in enumerate(files):
+        if not f.get("body"):
+            continue
+        if len(f["body"]) > MAX_ATTACHMENT_SIZE:
+            skipped += 1
+            continue
+        caption = captions[i].strip() if i < len(captions) else ""
+        db.create_inspection_attachment(
+            inspection_id, f["filename"], f["content_type"] or "application/octet-stream",
+            f["body"], caption, handler.current_user["id"],
+        )
+        saved += 1
+    return saved, skipped
+
+
 class ServiceCallAttachmentsHandler(BaseHandler):
     @require_login
     def post(self, call_id):
@@ -842,17 +871,7 @@ class InspectionAttachmentsHandler(BaseHandler):
         inspection_id = int(inspection_id)
         if not db.get_inspection(inspection_id):
             raise tornado.web.HTTPError(404)
-        caption = self.get_body_argument("caption", "")
-        files = self.request.files.get("file", [])
-        skipped = 0
-        for f in files:
-            if len(f["body"]) > MAX_ATTACHMENT_SIZE:
-                skipped += 1
-                continue
-            db.create_inspection_attachment(
-                inspection_id, f["filename"], f["content_type"] or "application/octet-stream",
-                f["body"], caption, self.current_user["id"],
-            )
+        saved, skipped = save_photo_uploads(self, inspection_id)
         back = f"/inspections/{inspection_id}"
         if skipped:
             back += f"?skipped={skipped}"
@@ -1260,6 +1279,8 @@ class InspectionNewHandler(BaseHandler):
             data, self.current_user["id"], service_call_id=service_call_id,
         )
 
+        save_photo_uploads(self, iid)
+
         if service_call_id:
             # If the work order this inspection belongs to was already fully
             # signed off (both manager + tech) before this inspection was
@@ -1337,6 +1358,8 @@ class InspectionEditHandler(BaseHandler):
             inspection_id, inspection_date, overall_result, system_impaired, critical,
             non_critical, satisfactory, data, self.current_user["id"],
         )
+
+        save_photo_uploads(self, inspection_id)
 
         if overall_result != "Incomplete":
             db.upsert_schedule(existing["site_id"], existing["asset_id"], existing["inspection_type"],
@@ -1481,7 +1504,8 @@ class InspectionPdfHandler(BaseHandler):
         client = db.get_client(inspection["client_id"])
         site = db.get_site(inspection["site_id"])
         asset = db.get_asset(inspection["asset_id"]) if inspection["asset_id"] else None
-        pdf_bytes = pdf_gen.generate_inspection_pdf(inspection, client, site, asset)
+        attachments = db.list_inspection_attachments_with_data(inspection["id"])
+        pdf_bytes = pdf_gen.generate_inspection_pdf(inspection, client, site, asset, attachments=attachments)
         self.set_header("Content-Type", "application/pdf")
         self.set_header("Content-Disposition",
                          f'inline; filename="SCFP_Inspection_{inspection_id}.pdf"')

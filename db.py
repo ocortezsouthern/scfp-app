@@ -1420,6 +1420,20 @@ def get_inspection_attachment_file(attachment_id):
     return row
 
 
+def list_inspection_attachments_with_data(inspection_id):
+    """Like list_inspection_attachments, but includes the raw file_data bytes —
+    used only when generating the PDF's Deficiency Report section (thumbnails),
+    since the lightweight list used on the detail page deliberately avoids
+    pulling image bytes for every row."""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM inspection_attachments WHERE inspection_id = ? ORDER BY uploaded_at ASC",
+        (inspection_id,),
+    ).fetchall()
+    conn.close()
+    return rows
+
+
 def delete_inspection_attachment(attachment_id):
     conn = get_conn()
     conn.execute("DELETE FROM inspection_attachments WHERE id = ?", (attachment_id,))
