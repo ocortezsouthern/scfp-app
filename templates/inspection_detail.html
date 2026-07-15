@@ -44,18 +44,18 @@
 
 <div class="panel">
   <h2>📷 Photos / Deficiency Documentation</h2>
-  <p class="muted" style="margin-top:-6px">Attach photos of any deficiencies found during this inspection — straight from a phone.</p>
-  <form method="post" action="/inspections/{{ inspection['id'] }}/attachments" enctype="multipart/form-data" class="form-grid">
+  <p class="muted" style="margin-top:-6px">Attach photos straight from a phone and describe what each one shows — these descriptions become the Deficiency Report below and on the printed inspection report.</p>
+  <form method="post" action="/inspections/{{ inspection['id'] }}/attachments" enctype="multipart/form-data">
     <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
-    <label>Caption / Notes (optional)<input type="text" name="caption"></label>
-    <label class="span2">Photo(s) <span class="muted">(you can select more than one)</span>
-      <input type="file" name="file" multiple accept="image/*,.pdf,.heic">
-    </label>
-    <div class="span2"><button type="submit" class="btn primary">Upload</button></div>
+    <div class="photo-repeater">
+      <div class="photo-rows"></div>
+      <button type="button" class="btn small add-photo-btn">+ Add Photo</button>
+    </div>
+    <div style="margin-top:10px;"><button type="submit" class="btn primary">Upload</button></div>
   </form>
 
   {% if attachments %}
-  <div class="attachment-grid">
+  <div class="attachment-grid" style="margin-top:16px;">
     {% for a in attachments %}
     <div class="attachment-card">
       {% if a['content_type'] and a['content_type'].startswith('image/') %}
@@ -79,6 +79,23 @@
   <p class="muted">No photos yet.</p>
   {% endif %}
 </div>
+
+{% if attachments %}
+<div class="panel">
+  <h2>📋 Deficiency Report</h2>
+  <p class="muted" style="margin-top:-6px">Compiled from the photo descriptions above, in the order they were added — this same list prints on the inspection PDF.</p>
+  <ul class="deficiency-list">
+    {% for a in attachments|reverse %}
+    <li class="deficiency-item">
+      {% if a['content_type'] and a['content_type'].startswith('image/') %}
+      <img src="/inspections/{{ inspection['id'] }}/attachments/{{ a['id'] }}/file" alt="{{ a['filename'] or 'photo' }}">
+      {% endif %}
+      <div><span class="deficiency-num">{{ loop.index }}.</span> {{ a['caption'] or 'No description provided' }}</div>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
 
 <div class="panel">
   <h2>Comparison to Previous Inspection</h2>

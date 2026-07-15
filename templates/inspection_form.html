@@ -71,7 +71,8 @@
   {% if remaining %}Submitting this will take you to the next requested inspection.{% else %}Submitting this will take you back to the work order.{% endif %}</div>
 {% endif %}
 
-<form method="post" action="{% if edit_mode %}/inspections/{{ inspection['id'] }}/edit{% else %}/inspections/new{% endif %}" id="inspection-form">
+<form method="post" action="{% if edit_mode %}/inspections/{{ inspection['id'] }}/edit{% else %}/inspections/new{% endif %}"
+      id="inspection-form" enctype="multipart/form-data">
   <input type="hidden" name="_xsrf" value="{{ xsrf_token }}">
   {% if not edit_mode %}
   <input type="hidden" name="inspection_type" value="{{ inspection_type }}">
@@ -80,6 +81,14 @@
   {% if remaining %}<input type="hidden" name="remaining" value="{{ remaining }}">{% endif %}
   {% endif %}
 
+  <div class="tab-bar">
+    <button type="button" class="tab-btn active" data-tab-group="insp-form" data-tab-target="details"
+            onclick="switchTab('insp-form', 'details')">Details</button>
+    <button type="button" class="tab-btn" data-tab-group="insp-form" data-tab-target="photos"
+            onclick="switchTab('insp-form', 'photos')">Photos</button>
+  </div>
+
+  <div class="tab-panel active" data-tab-group="insp-form" data-tab-name="details">
   <div class="panel">
     <div class="form-grid">
       <label>Site
@@ -162,6 +171,21 @@
     <h2>{{ closing.name }}</h2>
     <div class="form-grid">
       {% for f in closing.fields %}{{ simple_field(f, data) }}{% endfor %}
+    </div>
+  </div>
+  </div>
+
+  <div class="tab-panel" data-tab-group="insp-form" data-tab-name="photos">
+    <div class="panel">
+      <h2>📷 Photos — Deficiency Documentation</h2>
+      <p class="muted" style="margin-top:-6px">Attach photos straight from a phone and describe what each one shows — these descriptions become the Deficiency Report on the printed inspection report.</p>
+      {% if edit_mode %}
+      <p class="muted" style="margin-top:-6px">Already-uploaded photos aren't shown here — view, caption, or delete them from <a href="/inspections/{{ inspection['id'] }}">this inspection's page</a> after saving. Anything you add below will be added alongside them.</p>
+      {% endif %}
+      <div class="photo-repeater">
+        <div class="photo-rows"></div>
+        <button type="button" class="btn small add-photo-btn">+ Add Photo</button>
+      </div>
     </div>
   </div>
 
